@@ -1,8 +1,9 @@
-package main
+package commander_test
 
 import (
 	"fmt"
 	"os"
+	"testing"
 
 	"github.com/apourchet/commander"
 )
@@ -36,7 +37,8 @@ func (manager PetStoreManager) Delete() {}
 
 func (manager PetStoreManager) Default(newLocation string) {}
 
-func main() {
+func TestCommanderBasics(t *testing.T) {
 	err := commander.New().RunCLI(PetStore{}, os.Args)
 	fmt.Println(err)
+	t.Fail()
 }
