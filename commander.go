@@ -3,6 +3,7 @@ package commander
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -24,12 +25,6 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 
 	// Parse the arguments into that flagset
 	flagset.Parse(arguments)
-
-	// Apply the flagset that we got to set the flags inside the app struct
-	err = commander.ApplyFlagSet(app, flagset)
-	if err != nil {
-		return errors.Wrap(err, "Failed to apply flagset")
-	}
 
 	// Execute the first argument
 	args := flag.Args()
@@ -72,15 +67,32 @@ func (commander Commander) SubCommand(app interface{}, cmd string) (interface{},
 	return nil, nil
 }
 
-// GetFlagSet returns a flagset that corresponds to an application.
+// GetFlagSet returns a flagset that corresponds to an application. This does not get
+// return a flagset that will work for subcommands of that application.
 func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
-	return nil, fmt.Errorf("Not Implemented")
-}
+	st, valid := DerefStruct(app)
+	if !valid {
+		return nil, fmt.Errorf("An application needs to be a struct or a pointer to a struct")
+	}
 
-// ApplyFlagSet applies the flagset given to the application. This essentially sets fields of the application
-// that were said to come from flags.
-func (commander Commander) ApplyFlagSet(app interface{}, flagset *flag.FlagSet) error {
-	return nil
+	flagset := flag.NewFlagSet("commander-main", flag.PanicOnError)
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		if alias, ok := field.Tag.Lookup("commander"); ok && alias != "" {
+			split := strings.Split(alias, "=")
+			if len(split) != 2 {
+				return nil, fmt.Errorf("Malformed tag on application: %v", alias)
+			}
+			if split[0] != "flag" {
+				continue
+			}
+			err := SetFlag(flagset, app, field, split[1])
+			if err != nil {
+				return nil, errors.Wrapf(err, "Failed to setup flag for application")
+			}
+		}
+	}
+	return flagset, nil
 }
 
 // Usage returns the "help" string for this application.
