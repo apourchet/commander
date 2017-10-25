@@ -1,12 +1,10 @@
 package commander_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/apourchet/commander"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // PetStore will have the following commands
@@ -16,43 +14,46 @@ import (
 // petstore manage default <location>
 // petstore add <petname>
 // petstore remove <petname>
-type PetStore struct {
-	DryRun bool `commander:"flag=dry-run"`
+type Application struct {
+	SubApp *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
 
-	Manager PetStoreManager `commander:"subcommand=manage"`
+	count int
 }
 
-func (store PetStore) Add(petname string) {}
-
-func (store PetStore) Remove(petname string) {}
-
-type PetStoreManager struct {
-	StoreLocation string `commander:"long=store-location"`
+func (app Application) OpOne(str string) {
+	if str == "test" {
+		app.count++
+	}
 }
 
-func (manager PetStoreManager) Init() {}
+func (app Application) OpTwo(i int) {}
 
-func (manager PetStoreManager) Copy(newLocation string) {}
+type SubApplication struct {
+	count int
+}
 
-func (manager PetStoreManager) Delete() {}
+func (app SubApplication) OpThree() {}
 
-func (manager PetStoreManager) Default(newLocation string) {}
+func (app SubApplication) OpFour(m map[string]string) {
+	if m["test"] == "testing" {
+		app.count++
+	}
+}
 
 func TestCommanderBasics(t *testing.T) {
-	app := &PetStore{}
-	args := []string{"-dry-run", "store-location", "/tmp/petstore"}
+	app := &Application{}
+	args := []string{"opone"}
 	err := commander.New().RunCLI(app, args)
-	fmt.Println(err)
-	t.Fail()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, app.count)
 }
 
-func TestFlagParsing(t *testing.T) {
-	app := &PetStore{}
-	cmd := commander.New()
-	flagset, err := cmd.GetFlagSet(app)
-	require.Nil(t, err)
-
-	args := []string{"-dry-run", "store-location", "/tmp/petstore"}
-	flagset.Parse(args)
-	assert.True(t, app.DryRun)
+func TestCommanderSubcommand(t *testing.T) {
+	app := &Application{
+		SubApp: &SubApplication{},
+	}
+	args := []string{"subapp", "opthree"}
+	err := commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, app.SubApp.count)
 }
