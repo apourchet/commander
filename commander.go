@@ -32,7 +32,7 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 	// Get the flagset from the tags of the app struct
 	flagset, err := commander.GetFlagSet(app)
 	if err != nil {
-		return errors.Wrap(err, "Failed to get flagset")
+		return errors.WithStack(err)
 	}
 
 	// Parse the arguments into that flagset
@@ -120,7 +120,39 @@ func (commander Commander) RunCommand(app interface{}, cmd string, args ...strin
 // SubCommand returns the subcommand struct that corresponds to the command cmd. If none is found,
 // SubCommand returns nil, nil.
 func (commander Commander) SubCommand(app interface{}, cmd string) (interface{}, error) {
-	// TODO
+	st, valid := utils.DerefType(app)
+	if !valid {
+		return nil, fmt.Errorf("An application needs to be a struct or a pointer to a struct")
+	}
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		if alias, ok := field.Tag.Lookup("commander"); ok && alias != "" {
+			split := strings.Split(alias, "=")
+			if len(split) != 2 {
+				return nil, fmt.Errorf("Malformed tag on application: %v", alias)
+			}
+
+			// If this field has subflags, recurse inside that
+			if split[0] != "subcommand" {
+				continue
+			}
+			subcmd, _ := ParseSubcommandDirective(split[1])
+			if subcmd != cmd {
+				continue
+			}
+
+			// We have found the right subcommand
+			v, valid := utils.DerefValue(app)
+			if !valid || v.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("Failed to get subcommand from field %v of type %v", field.Name, st.Name())
+			}
+			fieldval := v.FieldByName(field.Name)
+			if !fieldval.IsValid() {
+				return nil, fmt.Errorf("Failed to get subcommand from field %v of type %v", field.Name, st.Name())
+			}
+			return fieldval.Interface(), nil
+		}
+	}
 	return nil, nil
 }
 
@@ -173,7 +205,8 @@ func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) 
 			if split[0] == "subcommand" {
 				v, valid := utils.DerefValue(app)
 				if !valid || v.Kind() != reflect.Struct {
-					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
+					// The subapp is nil or not a struct
+					return nil
 				}
 				fieldval := v.FieldByName(field.Name)
 				if !fieldval.IsValid() {
@@ -213,9 +246,8 @@ func (commander Commander) Usage(app interface{}) string {
 
 				// If this field has subflags, recurse inside that
 				if split[0] == "subcommand" {
-					inner := strings.Split(split[1], ",")
-					line := strings.Join(inner, "  |  ")
-					fmt.Fprintf(&buf, "  %v\n", line)
+					cmd, desc := ParseSubcommandDirective(split[1])
+					fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
 				}
 			}
 		}
@@ -229,4 +261,13 @@ func (commander Commander) Usage(app interface{}) string {
 func (commander Commander) PrintUsage(app interface{}) {
 	usage := commander.Usage(app)
 	fmt.Fprintf(commander.UsageOutput, usage)
+}
+
+// ParseSubcommandDirective parses the subcommand directive into the subcommand string and its description.
+func ParseSubcommandDirective(directive string) (cmd string, description string) {
+	split := strings.SplitN(directive, ",", 2)
+	if len(split) == 2 {
+		return split[0], split[1]
+	}
+	return split[0], "No description for this subcommand"
 }

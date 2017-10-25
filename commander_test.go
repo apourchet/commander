@@ -42,14 +42,26 @@ func (app *Application) OpVariadic(name string, names []string) {
 
 type SubApplication struct {
 	count int
+
+	SubSubApp *SubSubApplication `commander:"subcommand=subsubapp,Use subsubapp commands"`
 }
 
-func (app *SubApplication) OpThree() {}
+func (app *SubApplication) OpThree() {
+	app.count++
+}
 
 func (app *SubApplication) OpFour(m map[string]string) {
 	if m["test"] == "testing" {
 		app.count++
 	}
+}
+
+type SubSubApplication struct {
+	count int
+}
+
+func (app *SubSubApplication) OpDeep() {
+	app.count++
 }
 
 func TestCommanderBasics(t *testing.T) {
@@ -94,4 +106,26 @@ func TestCommanderSubcommand(t *testing.T) {
 	err := commander.New().RunCLI(app, args)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, app.SubApp.count)
+}
+
+func TestSubcommandArguments(t *testing.T) {
+	app := &Application{
+		SubApp: &SubApplication{},
+	}
+	args := []string{"subapp", "opfour", `{"test": "testing"}`}
+	err := commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, app.SubApp.count)
+}
+
+func TestSubSubcommand(t *testing.T) {
+	app := &Application{
+		SubApp: &SubApplication{
+			SubSubApp: &SubSubApplication{},
+		},
+	}
+	args := []string{"subapp", "subsubapp", "opdeep"}
+	err := commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, app.SubApp.SubSubApp.count)
 }
