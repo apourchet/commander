@@ -91,9 +91,7 @@ func (commander Commander) RunCommand(app interface{}, cmd string, args ...strin
 			return fmt.Errorf("Command %v requires %v arguments, have %v", cmd, inputsize-1, len(args))
 		} else if len(args) < inputsize-1 {
 			args = append(args, "[]")
-		}
-
-		if len(args) > inputsize-1 || method.Type.In(inputsize-1).Kind() == reflect.Slice {
+		} else if len(args) > inputsize-1 || method.Type.In(inputsize-1).Kind() == reflect.Slice {
 			// Then we consider that the extra arguments are just a list of strings
 			extras := args[inputsize-2:]
 			bytes, _ := json.Marshal(extras)

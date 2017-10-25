@@ -33,11 +33,7 @@ func (app *Application) OpTwo(i int) {
 }
 
 func (app *Application) OpVariadic(name string, names []string) {
-	if len(names) == 3 {
-		app.count++
-	} else {
-		app.count--
-	}
+	app.count += len(names)
 }
 
 type SubApplication struct {
@@ -81,16 +77,16 @@ func TestCommanderInt(t *testing.T) {
 }
 
 func TestCommanderVariadic(t *testing.T) {
-	app := &Application{}
+	app := &Application{count: -5}
 	args := []string{"opvariadic", "a"}
 	err := commander.New().RunCLI(app, args)
 	assert.Nil(t, err)
-	assert.Equal(t, -1, app.count)
+	assert.Equal(t, -5, app.count)
 
 	args = []string{"opvariadic", "a", "b"}
 	err = commander.New().RunCLI(app, args)
 	assert.Nil(t, err)
-	assert.Equal(t, -2, app.count)
+	assert.Equal(t, -4, app.count)
 
 	args = []string{"opvariadic", "a", "b", "c", "d"}
 	err = commander.New().RunCLI(app, args)
