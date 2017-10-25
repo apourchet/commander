@@ -2,6 +2,7 @@ package commander
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/apourchet/commander/utils"
 	"github.com/pkg/errors"
 )
 
@@ -29,7 +31,7 @@ func New() Commander {
 func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 	// Get the flagset from the tags of the app struct
 	flagset, err := commander.GetFlagSet(app)
-	if err != nil || flagset == nil {
+	if err != nil {
 		return errors.Wrap(err, "Failed to get flagset")
 	}
 
@@ -49,6 +51,7 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, arguments []string
 
 	// Check first if there is a subcommand with this name
 	if subapp, err := commander.SubCommand(app, args[0]); err != nil {
+		commander.PrintUsage(app)
 		return errors.Wrapf(err, "Failed to search for subcommand %v", args[0])
 	} else if subapp != nil {
 		return commander.RunCLI(subapp, args[1:])
@@ -56,6 +59,7 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, arguments []string
 
 	// Then check if there is a command with this name, and exit if there are errors
 	if found, err := commander.HasCommand(app, args[0]); err != nil {
+		commander.PrintUsage(app)
 		return errors.Wrapf(err, "Failed to search for command %v", args[0])
 	} else if !found {
 		commander.PrintUsage(app)
@@ -64,13 +68,53 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, arguments []string
 
 	// Finally run that command if everything seems fine
 	err := commander.RunCommand(app, args[0], args[1:]...)
-	return errors.Wrapf(err, "Failed to run command %v", args[0])
+	if err != nil {
+		commander.PrintUsage(app)
+		return errors.Wrapf(err, "Failed to run command %v", args[0])
+	}
+	return nil
 }
 
 // RunCommand runs a specific command of the application with arguments.
 func (commander Commander) RunCommand(app interface{}, cmd string, args ...string) error {
-	// TODO
-	return nil
+	apptype := reflect.TypeOf(app)
+	for i := 0; i < apptype.NumMethod(); i++ {
+		// Find the right method
+		method := apptype.Method(i)
+		if strings.ToLower(method.Name) != cmd {
+			continue
+		}
+
+		// Make sure we have enough args for this command
+		inputsize := method.Type.NumIn()
+		if len(args) < inputsize-1 && method.Type.In(inputsize-1).Kind() != reflect.Slice {
+			return fmt.Errorf("Command %v requires %v arguments, have %v", cmd, inputsize-1, len(args))
+		} else if len(args) < inputsize-1 {
+			args = append(args, "[]")
+		}
+
+		if len(args) > inputsize-1 || method.Type.In(inputsize-1).Kind() == reflect.Slice {
+			// Then we consider that the extra arguments are just a list of strings
+			extras := args[inputsize-2:]
+			bytes, _ := json.Marshal(extras)
+			args[inputsize-2] = string(bytes)
+			args = args[:inputsize-1]
+		}
+
+		in := make([]reflect.Value, len(args)+1)
+		in[0] = reflect.ValueOf(app)
+		for i, arg := range args {
+			t := method.Type.In(i + 1)
+			param, err := utils.ParseString(t, arg)
+			if err != nil {
+				return errors.Wrapf(err, "Failed to parse string into function argument")
+			}
+			in[i+1] = param
+		}
+		method.Func.Call(in)
+		return nil
+	}
+	return fmt.Errorf("Failed to find method %v", cmd)
 }
 
 // SubCommand returns the subcommand struct that corresponds to the command cmd. If none is found,
@@ -103,7 +147,7 @@ func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
 // SetupFlagSet goes through the type of the application and creates flags on the flagset passed in.
 func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) error {
 	// Get the raw type of the app
-	st, valid := DerefStruct(app)
+	st, valid := utils.DerefType(app)
 	if !valid {
 		return fmt.Errorf("An application needs to be a struct or a pointer to a struct")
 	}
@@ -127,7 +171,7 @@ func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) 
 
 			// If this field has subflags, recurse inside that
 			if split[0] == "subcommand" {
-				v, valid := Deref(app)
+				v, valid := utils.DerefValue(app)
 				if !valid || v.Kind() != reflect.Struct {
 					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
 				}
@@ -157,7 +201,7 @@ func (commander Commander) Usage(app interface{}) string {
 
 	// Then print subcommands
 	fmt.Fprintf(&buf, "\nSub-Commands:\n")
-	st, valid := DerefStruct(app)
+	st, valid := utils.DerefType(app)
 	if valid {
 		for i := 0; i < st.NumField(); i++ {
 			field := st.Field(i)

@@ -3,6 +3,9 @@ package commander
 import (
 	"flag"
 	"reflect"
+	"strings"
+
+	"github.com/apourchet/commander/utils"
 )
 
 // FlagTarget are the structs that the std::flag package will interact with. FlagTargets
@@ -24,7 +27,7 @@ func NewFlagTarget(object interface{}, field reflect.StructField) FlagTarget {
 
 // String returns the stringified value of the object's field that the FlagTarget is bound to.
 func (flagtarget FlagTarget) String() string {
-	v, valid := Deref(flagtarget.object)
+	v, valid := utils.DerefValue(flagtarget.object)
 	if !valid || v.Kind() != reflect.Struct {
 		return "Failed to stringify field"
 	}
@@ -34,7 +37,7 @@ func (flagtarget FlagTarget) String() string {
 		return "Failed to stringify field"
 	}
 
-	ok, str, err := Stringify(field)
+	ok, str, err := utils.Stringify(field)
 	if err != nil || !ok {
 		return "Failed to stringify field"
 	}
@@ -43,7 +46,7 @@ func (flagtarget FlagTarget) String() string {
 
 // Set sets the value of the field that the FlagTarget is bound to.
 func (flagtarget FlagTarget) Set(value string) error {
-	return SetField(flagtarget.object, flagtarget.field.Name, value)
+	return utils.SetField(flagtarget.object, flagtarget.field.Name, value)
 }
 
 // SetFlag creates a flag on the flagset given so that when the flagset.
@@ -65,4 +68,14 @@ func SetFlag(obj interface{}, flagset *flag.FlagSet, field reflect.StructField, 
 	flagtarget := NewFlagTarget(obj, field)
 	flagset.Var(flagtarget, name, usage)
 	return nil
+}
+
+// ParseFlagDirective parses the directive into the flag's name and its usage. The format of a flag directive is
+// <name>,<usage>
+func ParseFlagDirective(directive string) (name string, usage string) {
+	split := strings.SplitN(directive, ",", 2)
+	if len(split) == 1 {
+		return directive, "No usage found for this flag."
+	}
+	return split[0], split[1]
 }

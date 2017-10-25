@@ -20,21 +20,33 @@ type Application struct {
 	count int
 }
 
-func (app Application) OpOne(str string) {
+func (app *Application) OpOne(str string) {
 	if str == "test" {
 		app.count++
 	}
 }
 
-func (app Application) OpTwo(i int) {}
+func (app *Application) OpTwo(i int) {
+	if i == 30 {
+		app.count++
+	}
+}
+
+func (app *Application) OpVariadic(name string, names []string) {
+	if len(names) == 3 {
+		app.count++
+	} else {
+		app.count--
+	}
+}
 
 type SubApplication struct {
 	count int
 }
 
-func (app SubApplication) OpThree() {}
+func (app *SubApplication) OpThree() {}
 
-func (app SubApplication) OpFour(m map[string]string) {
+func (app *SubApplication) OpFour(m map[string]string) {
 	if m["test"] == "testing" {
 		app.count++
 	}
@@ -42,10 +54,36 @@ func (app SubApplication) OpFour(m map[string]string) {
 
 func TestCommanderBasics(t *testing.T) {
 	app := &Application{}
-	args := []string{"opone"}
+	args := []string{"opone", "test"}
 	err := commander.New().RunCLI(app, args)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, app.count)
+}
+
+func TestCommanderInt(t *testing.T) {
+	app := &Application{}
+	args := []string{"optwo", "30"}
+	err := commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, app.count)
+}
+
+func TestCommanderVariadic(t *testing.T) {
+	app := &Application{}
+	args := []string{"opvariadic", "a"}
+	err := commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, -1, app.count)
+
+	args = []string{"opvariadic", "a", "b"}
+	err = commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, -2, app.count)
+
+	args = []string{"opvariadic", "a", "b", "c", "d"}
+	err = commander.New().RunCLI(app, args)
+	assert.Nil(t, err)
+	assert.Equal(t, -1, app.count)
 }
 
 func TestCommanderSubcommand(t *testing.T) {
