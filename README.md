@@ -1,6 +1,5 @@
 # Commander
------------
-A CLI framework in Golang.
+A CLI framework in Golang that leverages the `reflect` package to get rid of some annoying switch statements and argument parsing logic that most Golang CLI applications have to deal with.
 
 # Example
 The following example shows how one could implement bogus file manager. Examples of the usage would be the following:
