@@ -17,8 +17,8 @@ type FlagTarget struct {
 }
 
 // NewFlagTarget creates a new FlagTarget that points to the object given.
-func NewFlagTarget(object interface{}, field reflect.StructField) FlagTarget {
-	flagtarget := FlagTarget{
+func NewFlagTarget(object interface{}, field reflect.StructField) *FlagTarget {
+	flagtarget := &FlagTarget{
 		object: object,
 		field:  field,
 	}
@@ -26,26 +26,13 @@ func NewFlagTarget(object interface{}, field reflect.StructField) FlagTarget {
 }
 
 // String returns the stringified value of the object's field that the FlagTarget is bound to.
-func (flagtarget FlagTarget) String() string {
-	v, valid := utils.DerefValue(flagtarget.object)
-	if !valid || v.Kind() != reflect.Struct {
-		return "Failed to stringify field"
-	}
-
-	field := v.FieldByName(flagtarget.field.Name)
-	if !field.IsValid() {
-		return "Failed to stringify field"
-	}
-
-	ok, str, err := utils.Stringify(field)
-	if err != nil || !ok {
-		return "Failed to stringify field"
-	}
-	return str
+func (flagtarget *FlagTarget) String() string {
+	// TODO: return default value
+	return " "
 }
 
 // Set sets the value of the field that the FlagTarget is bound to.
-func (flagtarget FlagTarget) Set(value string) error {
+func (flagtarget *FlagTarget) Set(value string) error {
 	return utils.SetField(flagtarget.object, flagtarget.field.Name, value)
 }
 
@@ -53,17 +40,17 @@ func (flagtarget FlagTarget) Set(value string) error {
 func SetFlag(obj interface{}, flagset *flag.FlagSet, field reflect.StructField, directive string) error {
 	name, usage := ParseFlagDirective(directive)
 
-	// TODO: Bool is special because it doesn't need a value.
-	// if field.Type.Kind() == reflect.Bool {
-	// 	v := reflect.ValueOf(obj)
-	// 	var ptr *bool
-	// 	if v.Kind() == reflect.Ptr {
-	// 		v = v.Elem().FieldByName(field.Name)
-	// 		ptr = v.Addr().Interface().(*bool)
-	// 		flagset.BoolVar(ptr, name, false, usage)
-	// 		return nil
-	// 	}
-	// }
+	if field.Type.Kind() == reflect.Bool {
+		// Bool is special because it doesn't need a value
+		v := reflect.ValueOf(obj)
+		var ptr *bool
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem().FieldByName(field.Name)
+			ptr = v.Addr().Interface().(*bool)
+			flagset.BoolVar(ptr, name, false, usage) // TODO: default value
+			return nil
+		}
+	}
 
 	flagtarget := NewFlagTarget(obj, field)
 	flagset.Var(flagtarget, name, usage)
@@ -71,7 +58,7 @@ func SetFlag(obj interface{}, flagset *flag.FlagSet, field reflect.StructField, 
 }
 
 // ParseFlagDirective parses the directive into the flag's name and its usage. The format of a flag directive is
-// <name>,<usage>
+// <name>,<usage>.
 func ParseFlagDirective(directive string) (name string, usage string) {
 	split := strings.SplitN(directive, ",", 2)
 	if len(split) == 1 {
