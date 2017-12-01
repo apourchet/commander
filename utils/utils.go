@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 // DerefType dereferences the type until it is of kind struct.
@@ -33,26 +34,26 @@ func DerefValue(obj interface{}) (reflect.Value, bool) {
 func Stringify(val interface{}) (bool, string, error) {
 	v, valid := DerefValue(val)
 	if !valid {
-		return true, "", nil
+		return false, "", nil
 	}
 
 	switch v.Kind() {
 	case reflect.Bool:
-		return false, fmt.Sprintf("%v", v.Bool()), nil
+		return true, fmt.Sprintf("%v", v.Bool()), nil
 	case reflect.Int, reflect.Int8, reflect.Int32, reflect.Int64:
-		return false, fmt.Sprintf("%v", v.Int()), nil
+		return true, fmt.Sprintf("%v", v.Int()), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint32, reflect.Uint64:
-		return false, fmt.Sprintf("%v", v.Uint()), nil
+		return true, fmt.Sprintf("%v", v.Uint()), nil
 	case reflect.Float32, reflect.Float64:
-		return false, fmt.Sprintf("%v", v.Float()), nil
+		return true, fmt.Sprintf("%v", v.Float()), nil
 	case reflect.String:
-		return false, fmt.Sprintf("%v", v.String()), nil
+		return true, fmt.Sprintf("%v", v.String()), nil
 	case reflect.Slice, reflect.Map:
 		content, err := json.Marshal(val)
 		if err != nil {
 			return false, "", fmt.Errorf("Failed to stringify value into url: %v", err)
 		}
-		return false, string(content), nil
+		return true, string(content), nil
 	}
 	return false, "", fmt.Errorf("Unsupported type: %T", val)
 }
@@ -80,6 +81,7 @@ func SetField(obj interface{}, fieldname, value string) error {
 }
 
 // ParseString parses the string into a value depending on the type that gets passed in.
+// time.Duration is handled separately because of the fact that its an int64 with some fancy parsing involved.
 func ParseString(t reflect.Type, value string) (reflect.Value, error) {
 	switch t.Kind() {
 	case reflect.Ptr:
@@ -118,10 +120,14 @@ func ParseString(t reflect.Type, value string) (reflect.Value, error) {
 		return reflect.ValueOf(int32(i)), nil
 	case reflect.Int64:
 		i, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T: %v", i, err)
+		if err == nil {
+			return reflect.ValueOf(int64(i)), nil
 		}
-		return reflect.ValueOf(int64(i)), nil
+		dur, err := time.ParseDuration(value)
+		if err != nil {
+			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T or %T: %v", i, dur, err)
+		}
+		return reflect.ValueOf(dur), nil
 	case reflect.Uint:
 		i, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {

@@ -14,16 +14,38 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// FieldTag is the name of the field tag that commander uses
+	FieldTag = "commander"
+
+	// SubcommandDirective indicates a subcommand
+	SubcommandDirective = "subcommand"
+
+	// FlagStructDirective indicates that the field
+	// is a struct containing flags to inject
+	FlagStructDirective = "flagstruct"
+
+	// FlagDirective indicates that this field should be populated using
+	// the command line flags
+	FlagDirective = "flag"
+)
+
+type namedCLI interface {
+	CLIName() string
+}
+
 // Commander is the struct that CLI applications will interact with
 // to run their code.
 type Commander struct {
-	UsageOutput io.Writer
+	UsageOutput       io.Writer
+	FlagErrorHandling flag.ErrorHandling
 }
 
 // New creates a new instance of the Commander.
 func New() Commander {
 	return Commander{
-		UsageOutput: os.Stdout,
+		UsageOutput:       os.Stdout,
+		FlagErrorHandling: flag.ContinueOnError,
 	}
 }
 
@@ -36,7 +58,10 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 	}
 
 	// Parse the arguments into that flagset
-	flagset.Parse(arguments)
+	err = flagset.Parse(arguments)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	return commander.RunCLIWithFlagSet(app, arguments, flagset)
 }
 
@@ -124,16 +149,18 @@ func (commander Commander) SubCommand(app interface{}, cmd string) (interface{},
 	}
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
-		if alias, ok := field.Tag.Lookup("commander"); ok && alias != "" {
+		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
 			split := strings.Split(alias, "=")
-			if len(split) != 2 {
+			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
 				return nil, fmt.Errorf("Malformed tag on application: %v", alias)
 			}
 
 			// If this field has subflags, recurse inside that
-			if split[0] != "subcommand" {
+			if split[0] != SubcommandDirective {
 				continue
 			}
+
+			// Parse the directive to get the subcommand
 			subcmd, _ := ParseSubcommandDirective(split[1])
 			if subcmd != cmd {
 				continue
@@ -169,13 +196,17 @@ func (commander Commander) HasCommand(app interface{}, cmd string) (bool, error)
 // GetFlagSet returns a flagset that corresponds to an application. This does not get
 // return a flagset that will work for subcommands of that application.
 func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
-	flagset := flag.NewFlagSet("commander-main", flag.ExitOnError)
-	err := commander.SetupFlagSet(app, flagset)
+	appname := "commander-cli"
+	if casted, ok := app.(namedCLI); ok {
+		appname = casted.CLIName()
+	}
+	flagset := flag.NewFlagSet(appname, commander.FlagErrorHandling)
+	err := commander.SetuflagSet(app, flagset)
 	return flagset, errors.Wrapf(err, "Failed to get flagset")
 }
 
-// SetupFlagSet goes through the type of the application and creates flags on the flagset passed in.
-func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) error {
+// SetuflagSet goes through the type of the application and creates flags on the flagset passed in.
+func (commander Commander) SetuflagSet(app interface{}, flagset *flag.FlagSet) error {
 	// Get the raw type of the app
 	st, valid := utils.DerefType(app)
 	if !valid {
@@ -185,14 +216,14 @@ func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) 
 	// Look through each field for flags and subcommand flags
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
-		if alias, ok := field.Tag.Lookup("commander"); ok && alias != "" {
+		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
 			split := strings.Split(alias, "=")
-			if len(split) != 2 {
+			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
 				return fmt.Errorf("Malformed tag on application: %v", alias)
 			}
 
 			// If this field is itself a flag
-			if split[0] == "flag" {
+			if split[0] == FlagDirective {
 				err := SetFlag(app, flagset, field, split[1])
 				if err != nil {
 					return errors.Wrapf(err, "Failed to setup flag for application")
@@ -200,7 +231,7 @@ func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) 
 			}
 
 			// If this field has subflags, recurse inside that
-			if split[0] == "subcommand" {
+			if split[0] == SubcommandDirective || split[0] == FlagStructDirective {
 				v, valid := utils.DerefValue(app)
 				if !valid || v.Kind() != reflect.Struct {
 					// The subapp is nil or not a struct
@@ -210,7 +241,7 @@ func (commander Commander) SetupFlagSet(app interface{}, flagset *flag.FlagSet) 
 				if !fieldval.IsValid() {
 					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
 				}
-				if err := commander.SetupFlagSet(fieldval.Interface(), flagset); err != nil {
+				if err := commander.SetuflagSet(fieldval.Interface(), flagset); err != nil {
 					return errors.Wrap(err, "Failed to get flagset for sub-struct")
 				}
 			}
@@ -231,26 +262,23 @@ func (commander Commander) Usage(app interface{}) string {
 	}
 
 	// Then print subcommands
-	fmt.Fprintf(&buf, "\nSub-Commands:\n")
 	st, valid := utils.DerefType(app)
-	if valid {
+	if valid && st.NumField() > 0 {
+		fmt.Fprintf(&buf, "\nSub-Commands:\n")
 		for i := 0; i < st.NumField(); i++ {
 			field := st.Field(i)
-			if alias, ok := field.Tag.Lookup("commander"); ok && alias != "" {
+			if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
 				split := strings.Split(alias, "=")
-				if len(split) != 2 {
+				if len(split) != 2 || split[0] != SubcommandDirective {
 					continue
 				}
 
 				// If this field has subflags, recurse inside that
-				if split[0] == "subcommand" {
-					cmd, desc := ParseSubcommandDirective(split[1])
-					fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
-				}
+				cmd, desc := ParseSubcommandDirective(split[1])
+				fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
 			}
 		}
 	}
-	fmt.Fprintf(&buf, "\n")
 	return buf.String()
 }
 

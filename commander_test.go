@@ -1,23 +1,20 @@
 package commander_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/apourchet/commander"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// PetStore will have the following commands
-// petstore manage init
-// petstore manage copy <new-location>
-// petstore manage delete
-// petstore manage default <location>
-// petstore add <petname>
-// petstore remove <petname>
 type Application struct {
-	SubApp *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
-
 	count int
+
+	IntFlag int `commander:"flag=intflag,An int"`
+
+	SubApp *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
 }
 
 func (app *Application) OpOne(str string) {
@@ -32,12 +29,16 @@ func (app *Application) OpTwo(i int) {
 	}
 }
 
+func (app *Application) CLIName() string { return "myapp" }
+
 func (app *Application) OpVariadic(name string, names []string) {
 	app.count += len(names)
 }
 
 type SubApplication struct {
 	count int
+
+	SubIntFlag int `commander:"flag=subintflag,Another int"`
 
 	SubSubApp *SubSubApplication `commander:"subcommand=subsubapp,Use subsubapp commands"`
 }
@@ -64,34 +65,34 @@ func TestCommanderBasics(t *testing.T) {
 	app := &Application{}
 	args := []string{"opone", "test"}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, app.count)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.count)
 }
 
 func TestCommanderInt(t *testing.T) {
 	app := &Application{}
 	args := []string{"optwo", "30"}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, app.count)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.count)
 }
 
 func TestCommanderVariadic(t *testing.T) {
 	app := &Application{count: -5}
 	args := []string{"opvariadic", "a"}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, -5, app.count)
+	require.NoError(t, err)
+	require.Equal(t, -5, app.count)
 
 	args = []string{"opvariadic", "a", "b"}
 	err = commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, -4, app.count)
+	require.NoError(t, err)
+	require.Equal(t, -4, app.count)
 
 	args = []string{"opvariadic", "a", "b", "c", "d"}
 	err = commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, -1, app.count)
+	require.NoError(t, err)
+	require.Equal(t, -1, app.count)
 }
 
 func TestCommanderSubcommand(t *testing.T) {
@@ -100,8 +101,8 @@ func TestCommanderSubcommand(t *testing.T) {
 	}
 	args := []string{"subapp", "opthree"}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, app.SubApp.count)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.count)
 }
 
 func TestSubcommandArguments(t *testing.T) {
@@ -110,8 +111,8 @@ func TestSubcommandArguments(t *testing.T) {
 	}
 	args := []string{"subapp", "opfour", `{"test": "testing"}`}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, app.SubApp.count)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.count)
 }
 
 func TestSubSubcommand(t *testing.T) {
@@ -122,6 +123,82 @@ func TestSubSubcommand(t *testing.T) {
 	}
 	args := []string{"subapp", "subsubapp", "opdeep"}
 	err := commander.New().RunCLI(app, args)
-	assert.Nil(t, err)
-	assert.Equal(t, 1, app.SubApp.SubSubApp.count)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.SubSubApp.count)
+}
+
+func TestFlagOrder(t *testing.T) {
+	app := &Application{
+		SubApp: &SubApplication{},
+	}
+	args := []string{"--intflag", "10", "subapp", "opthree"}
+	err := commander.New().RunCLI(app, args)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.count)
+	require.Equal(t, 10, app.IntFlag)
+	require.Equal(t, 0, app.SubApp.SubIntFlag)
+
+	app = &Application{
+		SubApp: &SubApplication{},
+	}
+	args = []string{"subapp", "--subintflag", "10", "opthree"}
+	err = commander.New().RunCLI(app, args)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.count)
+	require.Equal(t, 0, app.IntFlag)
+	require.Equal(t, 10, app.SubApp.SubIntFlag)
+
+	app = &Application{
+		SubApp: &SubApplication{},
+	}
+	args = []string{"--intflag", "10", "subapp", "--subintflag", "10", "opthree"}
+	err = commander.New().RunCLI(app, args)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.SubApp.count)
+	require.Equal(t, 10, app.IntFlag)
+	require.Equal(t, 10, app.SubApp.SubIntFlag)
+}
+
+func TestUsage(t *testing.T) {
+	app := &Application{
+		SubApp: &SubApplication{},
+	}
+	cmd := commander.New()
+	expected := `Usage of myapp:
+  -intflag value
+    	An int
+  -subintflag value
+    	Another int
+
+Sub-Commands:
+  subapp  |  Use subapp commands
+`
+	usage := cmd.Usage(app)
+	AssertEqualLines(t, expected, usage)
+}
+
+func AssertEqualLines(t *testing.T, expected, actual string) {
+	swapped := false
+	small, big := strings.Split(expected, "\n"), strings.Split(actual, "\n")
+	if len(small) > len(big) {
+		small, big = big, small
+		swapped = true
+	}
+
+	for i := range small {
+		if !swapped {
+			assert.Equal(t, small[i], big[i])
+		} else {
+			assert.Equal(t, big[i], small[i])
+		}
+	}
+
+	symbol := "+"
+	if swapped {
+		symbol = "-"
+	}
+
+	for i := len(small); i < len(big); i++ {
+		assert.Fail(t, symbol+big[i])
+	}
 }

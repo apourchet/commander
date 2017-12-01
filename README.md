@@ -95,5 +95,4 @@ $ go run test/main.go -dry-run=true rm README.md
 ```
 
 ## TODOs 
-- Get bool flags to work without values (e.g: cli --dry-run)
 - Get flags to work with non-pointer structs for subcommands
