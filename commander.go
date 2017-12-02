@@ -171,7 +171,7 @@ func (commander Commander) SubCommand(app interface{}, cmd string) (interface{},
 			}
 
 			// Parse the directive to get the subcommand
-			subcmd, _ := ParseSubcommandDirective(split[1])
+			subcmd, _ := parseSubcommandDirective(split[1])
 			if subcmd != cmd {
 				continue
 			}
@@ -212,15 +212,15 @@ func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
 	}
 
 	flagset := flag.NewFlagSet(appname, commander.FlagErrorHandling)
-	setter := NewFlagSetter(flagset)
-	defer setter.Finish()
+	setter := newFlagSetter(flagset)
+	defer setter.finish()
 
-	err := commander.SetupflagSet(app, setter)
+	err := commander.setupFlagSet(app, setter)
 	return flagset, errors.Wrapf(err, "Failed to get flagset")
 }
 
 // SetupflagSet goes through the type of the application and creates flags on the flagset passed in.
-func (commander Commander) SetupflagSet(app interface{}, setter *FlagSetter) error {
+func (commander Commander) setupFlagSet(app interface{}, setter *flagSetter) error {
 	// Get the raw type of the app
 	st, valid := utils.DerefType(app)
 	if !valid {
@@ -238,7 +238,7 @@ func (commander Commander) SetupflagSet(app interface{}, setter *FlagSetter) err
 
 			// If this field is itself a flag
 			if split[0] == FlagDirective {
-				err := setter.SetFlag(app, field, split[1])
+				err := setter.setFlag(app, field, split[1])
 				if err != nil {
 					return errors.Wrapf(err, "Failed to setup flag for application")
 				}
@@ -255,7 +255,7 @@ func (commander Commander) SetupflagSet(app interface{}, setter *FlagSetter) err
 				if !fieldval.IsValid() {
 					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
 				}
-				if err := commander.SetupflagSet(fieldval.Interface(), setter); err != nil {
+				if err := commander.setupFlagSet(fieldval.Interface(), setter); err != nil {
 					return errors.Wrap(err, "Failed to get flagset for sub-struct")
 				}
 			}
@@ -288,7 +288,7 @@ func (commander Commander) Usage(app interface{}) string {
 				}
 
 				// If this field has subflags, recurse inside that
-				cmd, desc := ParseSubcommandDirective(split[1])
+				cmd, desc := parseSubcommandDirective(split[1])
 				fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
 			}
 		}
@@ -304,7 +304,7 @@ func (commander Commander) PrintUsage(app interface{}) {
 }
 
 // ParseSubcommandDirective parses the subcommand directive into the subcommand string and its description.
-func ParseSubcommandDirective(directive string) (cmd string, description string) {
+func parseSubcommandDirective(directive string) (cmd string, description string) {
 	split := strings.SplitN(directive, ",", 2)
 	if len(split) == 2 {
 		return split[0], split[1]

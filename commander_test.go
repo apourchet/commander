@@ -179,12 +179,13 @@ func TestFlagOrder(t *testing.T) {
 
 func TestUsage(t *testing.T) {
 	app := &Application{
-		SubApp: &SubApplication{},
+		IntFlag: 10,
+		SubApp:  &SubApplication{},
 	}
 	cmd := commander.New()
 	expected := `Usage of myapp:
   -intflag value
-    	An int (default=0)
+    	An int (default 10)
 
 Sub-Commands:
   subapp  |  Use subapp commands
