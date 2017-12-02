@@ -45,7 +45,7 @@ type Commander struct {
 func New() Commander {
 	return Commander{
 		UsageOutput:       os.Stdout,
-		FlagErrorHandling: flag.ContinueOnError,
+		FlagErrorHandling: flag.ExitOnError,
 	}
 }
 
