@@ -36,6 +36,22 @@ func TestFlagParsing(t *testing.T) {
 	require.Equal(t, 10, app.Int)
 }
 
+func TestFlagDefaults(t *testing.T) {
+	cmd := commander.New()
+
+	app := &FlagTester{
+		String: "somestring",
+		Bool:   true,
+	}
+	flagset, err := cmd.GetFlagSet(app)
+	require.NoError(t, err)
+	args := []string{"--intflag", "10"}
+	flagset.Parse(args)
+	require.True(t, app.Bool)
+	require.Equal(t, "somestring", app.String)
+	require.Equal(t, 10, app.Int)
+}
+
 type FlagTesterNested struct {
 	Toplevel bool `commander:"flag=toplevel,A toplevel bool"`
 

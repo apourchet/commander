@@ -71,8 +71,7 @@ func (setter *FlagSetter) SetFlag(obj interface{}, field reflect.StructField, di
 		if v.Kind() == reflect.Ptr {
 			v = v.Elem().FieldByName(field.Name)
 			ptr = v.Addr().Interface().(*bool)
-			// TODO: default value
-			setter.flagset.BoolVar(ptr, name, false, usage)
+			setter.flagset.BoolVar(ptr, name, *ptr, usage)
 			return nil
 		}
 	}
