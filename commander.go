@@ -200,13 +200,17 @@ func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
 	if casted, ok := app.(namedCLI); ok {
 		appname = casted.CLIName()
 	}
+
 	flagset := flag.NewFlagSet(appname, commander.FlagErrorHandling)
-	err := commander.SetuflagSet(app, flagset)
+	setter := NewFlagSetter(flagset)
+	defer setter.Finish()
+
+	err := commander.SetupflagSet(app, setter)
 	return flagset, errors.Wrapf(err, "Failed to get flagset")
 }
 
-// SetuflagSet goes through the type of the application and creates flags on the flagset passed in.
-func (commander Commander) SetuflagSet(app interface{}, flagset *flag.FlagSet) error {
+// SetupflagSet goes through the type of the application and creates flags on the flagset passed in.
+func (commander Commander) SetupflagSet(app interface{}, setter *FlagSetter) error {
 	// Get the raw type of the app
 	st, valid := utils.DerefType(app)
 	if !valid {
@@ -224,14 +228,14 @@ func (commander Commander) SetuflagSet(app interface{}, flagset *flag.FlagSet) e
 
 			// If this field is itself a flag
 			if split[0] == FlagDirective {
-				err := SetFlag(app, flagset, field, split[1])
+				err := setter.SetFlag(app, field, split[1])
 				if err != nil {
 					return errors.Wrapf(err, "Failed to setup flag for application")
 				}
 			}
 
 			// If this field has subflags, recurse inside that
-			if split[0] == SubcommandDirective || split[0] == FlagStructDirective {
+			if split[0] == FlagStructDirective {
 				v, valid := utils.DerefValue(app)
 				if !valid || v.Kind() != reflect.Struct {
 					// The subapp is nil or not a struct
@@ -241,7 +245,7 @@ func (commander Commander) SetuflagSet(app interface{}, flagset *flag.FlagSet) e
 				if !fieldval.IsValid() {
 					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
 				}
-				if err := commander.SetuflagSet(fieldval.Interface(), flagset); err != nil {
+				if err := commander.SetupflagSet(fieldval.Interface(), setter); err != nil {
 					return errors.Wrap(err, "Failed to get flagset for sub-struct")
 				}
 			}

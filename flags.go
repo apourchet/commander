@@ -12,32 +12,60 @@ import (
 // will populate the values of the fields of the given object through the Set function
 // that the std::flag package calls when a flag is defined.
 type FlagTarget struct {
-	object interface{}
-	field  reflect.StructField
+	objects []interface{}
+	fields  []reflect.StructField
+	usage   string
 }
 
 // NewFlagTarget creates a new FlagTarget that points to the object given.
-func NewFlagTarget(object interface{}, field reflect.StructField) *FlagTarget {
+func NewFlagTarget() *FlagTarget {
 	flagtarget := &FlagTarget{
-		object: object,
-		field:  field,
+		objects: []interface{}{},
+		fields:  []reflect.StructField{},
+		usage:   "",
 	}
 	return flagtarget
 }
 
+func (target *FlagTarget) add(obj interface{}, field reflect.StructField, usage string) {
+	target.objects = append(target.objects, obj)
+	target.fields = append(target.fields, field)
+	target.usage = usage
+}
+
 // String returns the stringified value of the object's field that the FlagTarget is bound to.
-func (flagtarget *FlagTarget) String() string {
+func (target *FlagTarget) String() string {
 	// TODO: return default value
 	return " "
 }
 
 // Set sets the value of the field that the FlagTarget is bound to.
-func (flagtarget *FlagTarget) Set(value string) error {
-	return utils.SetField(flagtarget.object, flagtarget.field.Name, value)
+func (target *FlagTarget) Set(value string) error {
+	for i := 0; i < len(target.objects); i++ {
+		if err := utils.SetField(target.objects[i], target.fields[i].Name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// FlagSetter is the wrapper around flag.FlagSet that allows setting of a flag multiple times. This is
+// useful in the case of subcommands that might use the same flag.
+type FlagSetter struct {
+	flagset *flag.FlagSet
+	targets map[string]*FlagTarget
+}
+
+// NewFlagSetter returns a new FlagSetter, with the internal variables initialized.
+func NewFlagSetter(flagset *flag.FlagSet) *FlagSetter {
+	return &FlagSetter{
+		flagset: flagset,
+		targets: map[string]*FlagTarget{},
+	}
 }
 
 // SetFlag creates a flag on the flagset given so that when the flagset.
-func SetFlag(obj interface{}, flagset *flag.FlagSet, field reflect.StructField, directive string) error {
+func (setter *FlagSetter) SetFlag(obj interface{}, field reflect.StructField, directive string) error {
 	name, usage := ParseFlagDirective(directive)
 
 	if field.Type.Kind() == reflect.Bool {
@@ -47,14 +75,30 @@ func SetFlag(obj interface{}, flagset *flag.FlagSet, field reflect.StructField, 
 		if v.Kind() == reflect.Ptr {
 			v = v.Elem().FieldByName(field.Name)
 			ptr = v.Addr().Interface().(*bool)
-			flagset.BoolVar(ptr, name, false, usage) // TODO: default value
+			setter.flagset.BoolVar(ptr, name, false, usage) // TODO: default value
 			return nil
 		}
 	}
 
-	flagtarget := NewFlagTarget(obj, field)
-	flagset.Var(flagtarget, name, usage)
+	setter.addTarget(name, obj, field, usage)
 	return nil
+}
+
+// Finish tells the setter that the flags have all been accounted for, and it can forward all the flag
+// setup to the internal flagset.
+func (setter *FlagSetter) Finish() {
+	for name, target := range setter.targets {
+		setter.flagset.Var(target, name, target.usage)
+	}
+}
+
+func (setter *FlagSetter) addTarget(name string, obj interface{}, field reflect.StructField, usage string) {
+	target, found := setter.targets[name]
+	if !found {
+		target = NewFlagTarget()
+	}
+	target.add(obj, field, usage)
+	setter.targets[name] = target
 }
 
 // ParseFlagDirective parses the directive into the flag's name and its usage. The format of a flag directive is

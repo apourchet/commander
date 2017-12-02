@@ -14,7 +14,8 @@ type Application struct {
 
 	IntFlag int `commander:"flag=intflag,An int"`
 
-	SubApp *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
+	SubApp  *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
+	SubApp2 *SubApplication `commander:"subcommand=subapp2,Use subapp commands"`
 }
 
 func (app *Application) OpOne(str string) {
@@ -167,11 +168,10 @@ func TestUsage(t *testing.T) {
 	expected := `Usage of myapp:
   -intflag value
     	An int
-  -subintflag value
-    	Another int
 
 Sub-Commands:
   subapp  |  Use subapp commands
+  subapp2  |  Use subapp commands
 `
 	usage := cmd.Usage(app)
 	AssertEqualLines(t, expected, usage)

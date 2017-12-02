@@ -39,7 +39,7 @@ func TestFlagParsing(t *testing.T) {
 type FlagTesterNested struct {
 	Toplevel bool `commander:"flag=toplevel,A toplevel bool"`
 
-	Nested *FlagTester `commander:"flagstruct=nested"`
+	Nested *FlagTester `commander:"flagstruct"`
 }
 
 func TestFlagParsingNested(t *testing.T) {
