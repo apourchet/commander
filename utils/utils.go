@@ -94,6 +94,8 @@ func SetField(obj interface{}, fieldname, value string) error {
 	field := v.FieldByName(fieldname)
 	if !field.IsValid() {
 		return fmt.Errorf("Field not found when setting field: %s", fieldname)
+	} else if !field.CanSet() {
+		return fmt.Errorf("Cannot set field '%s' of non-pointer struct", fieldname)
 	}
 
 	val, err := ParseString(field.Type(), value)

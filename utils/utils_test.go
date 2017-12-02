@@ -58,6 +58,19 @@ type MyStruct struct {
 	Unsupported map[int]string
 }
 
+func TestSetFieldNonPointer(t *testing.T) {
+	obj := MyStruct{}
+	err := utils.SetField(obj, "B", "true")
+	require.Error(t, err)
+}
+
+func TestDerefType(t *testing.T) {
+	obj := &MyStruct{}
+	st, valid := utils.DerefType(obj)
+	require.True(t, valid)
+	require.Equal(t, 19, st.NumField())
+}
+
 func TestSetFieldFailures(t *testing.T) {
 	obj := &MyStruct{}
 	table := []struct {
