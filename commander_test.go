@@ -1,6 +1,7 @@
 package commander_test
 
 import (
+	"io/ioutil"
 	"strings"
 	"testing"
 
@@ -63,11 +64,18 @@ func (app *SubSubApplication) OpDeep() {
 }
 
 func TestCommanderBasics(t *testing.T) {
+	cmd := commander.New()
+	cmd.UsageOutput = ioutil.Discard
+
 	app := &Application{}
 	args := []string{"opone", "test"}
-	err := commander.New().RunCLI(app, args)
+	err := cmd.RunCLI(app, args)
 	require.NoError(t, err)
 	require.Equal(t, 1, app.count)
+
+	args = []string{"opone"}
+	err = cmd.RunCLI(app, args)
+	require.Error(t, err)
 }
 
 func TestCommanderInt(t *testing.T) {
