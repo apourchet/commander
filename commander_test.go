@@ -184,7 +184,7 @@ func TestUsage(t *testing.T) {
 	cmd := commander.New()
 	expected := `Usage of myapp:
   -intflag value
-    	An int
+    	An int (default=0)
 
 Sub-Commands:
   subapp  |  Use subapp commands

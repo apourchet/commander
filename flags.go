@@ -2,49 +2,45 @@ package commander
 
 import (
 	"flag"
+	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/apourchet/commander/utils"
+	"github.com/pkg/errors"
 )
 
 // FlagTarget are the structs that the std::flag package will interact with. FlagTargets
 // will populate the values of the fields of the given object through the Set function
 // that the std::flag package calls when a flag is defined.
 type FlagTarget struct {
-	objects []interface{}
-	fields  []reflect.StructField
-	usage   string
+	object interface{}
+	field  reflect.StructField
+	usage  string
 }
 
 // NewFlagTarget creates a new FlagTarget that points to the object given.
-func NewFlagTarget() *FlagTarget {
+func NewFlagTarget(obj interface{}, field reflect.StructField, usage string) *FlagTarget {
+	def, _ := utils.GetFieldValue(obj, field.Name)
+	usage = fmt.Sprintf("%s (default=%s)", usage, def)
 	flagtarget := &FlagTarget{
-		objects: []interface{}{},
-		fields:  []reflect.StructField{},
-		usage:   "",
+		object: obj,
+		field:  field,
+		usage:  usage,
 	}
 	return flagtarget
-}
-
-func (target *FlagTarget) add(obj interface{}, field reflect.StructField, usage string) {
-	target.objects = append(target.objects, obj)
-	target.fields = append(target.fields, field)
-	target.usage = usage
 }
 
 // String returns the stringified value of the object's field that the FlagTarget is bound to.
 func (target *FlagTarget) String() string {
 	// TODO: return default value
-	return " "
+	return ""
 }
 
 // Set sets the value of the field that the FlagTarget is bound to.
 func (target *FlagTarget) Set(value string) error {
-	for i := 0; i < len(target.objects); i++ {
-		if err := utils.SetField(target.objects[i], target.fields[i].Name, value); err != nil {
-			return err
-		}
+	if err := utils.SetField(target.object, target.field.Name, value); err != nil {
+		return err
 	}
 	return nil
 }
@@ -75,13 +71,13 @@ func (setter *FlagSetter) SetFlag(obj interface{}, field reflect.StructField, di
 		if v.Kind() == reflect.Ptr {
 			v = v.Elem().FieldByName(field.Name)
 			ptr = v.Addr().Interface().(*bool)
-			setter.flagset.BoolVar(ptr, name, false, usage) // TODO: default value
+			// TODO: default value
+			setter.flagset.BoolVar(ptr, name, false, usage)
 			return nil
 		}
 	}
 
-	setter.addTarget(name, obj, field, usage)
-	return nil
+	return setter.addTarget(name, obj, field, usage)
 }
 
 // Finish tells the setter that the flags have all been accounted for, and it can forward all the flag
@@ -92,13 +88,14 @@ func (setter *FlagSetter) Finish() {
 	}
 }
 
-func (setter *FlagSetter) addTarget(name string, obj interface{}, field reflect.StructField, usage string) {
+func (setter *FlagSetter) addTarget(name string, obj interface{}, field reflect.StructField, usage string) error {
 	target, found := setter.targets[name]
-	if !found {
-		target = NewFlagTarget()
+	if found {
+		return errors.Errorf("Duplicate binding of flag: %v", name)
 	}
-	target.add(obj, field, usage)
+	target = NewFlagTarget(obj, field, usage)
 	setter.targets[name] = target
+	return nil
 }
 
 // ParseFlagDirective parses the directive into the flag's name and its usage. The format of a flag directive is

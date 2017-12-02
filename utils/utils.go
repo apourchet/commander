@@ -18,6 +18,7 @@ func DerefType(obj interface{}) (reflect.Type, bool) {
 }
 
 // DerefValue dereferences pointers and interfaces until they become their base types.
+// Returns false if the inner interface is nil after dereferencing.
 func DerefValue(obj interface{}) (reflect.Value, bool) {
 	v := reflect.ValueOf(obj)
 	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
@@ -31,31 +32,55 @@ func DerefValue(obj interface{}) (reflect.Value, bool) {
 
 // Stringify returns the string representation of the value given. It functions like fmt.Printf("%v")
 // except for slices and maps; where it json stringifies them.
-func Stringify(val interface{}) (bool, string, error) {
+func Stringify(val interface{}) (string, error) {
 	v, valid := DerefValue(val)
 	if !valid {
-		return false, "", nil
+		return "", nil
 	}
+	return StringifyValue(reflect.ValueOf(v.Interface()))
+}
 
+// StringifyValue returns the string representation of the value given. It functions like fmt.Printf("%v")
+// except for slices and maps; where it json stringifies them.
+func StringifyValue(v reflect.Value) (string, error) {
 	switch v.Kind() {
+	case reflect.Ptr:
+		return StringifyValue(v.Elem())
 	case reflect.Bool:
-		return true, fmt.Sprintf("%v", v.Bool()), nil
-	case reflect.Int, reflect.Int8, reflect.Int32, reflect.Int64:
-		return true, fmt.Sprintf("%v", v.Int()), nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint32, reflect.Uint64:
-		return true, fmt.Sprintf("%v", v.Uint()), nil
+		return fmt.Sprintf("%v", v.Bool()), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%v", v.Int()), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf("%v", v.Uint()), nil
 	case reflect.Float32, reflect.Float64:
-		return true, fmt.Sprintf("%v", v.Float()), nil
+		return fmt.Sprintf("%v", v.Float()), nil
 	case reflect.String:
-		return true, fmt.Sprintf("%v", v.String()), nil
+		return fmt.Sprintf("%v", v.String()), nil
 	case reflect.Slice, reflect.Map:
+		val := v.Interface()
 		content, err := json.Marshal(val)
 		if err != nil {
-			return false, "", fmt.Errorf("Failed to stringify value into url: %v", err)
+			return "", fmt.Errorf("Failed to stringify value into url: %v", err)
 		}
-		return true, string(content), nil
+		return string(content), nil
 	}
-	return false, "", fmt.Errorf("Unsupported type: %T", val)
+	return "", fmt.Errorf("Unsupported type: %v", v.Kind())
+}
+
+// GetFieldValue returns the stringified value of the field by name given the object.
+func GetFieldValue(obj interface{}, fieldname string) (string, error) {
+	v, valid := DerefValue(obj)
+	if !valid || v.Kind() != reflect.Struct {
+		return "", nil
+	}
+
+	field := v.FieldByName(fieldname)
+	if !field.IsValid() {
+		return "", fmt.Errorf("Field not found when setting field: %s", fieldname)
+	}
+
+	str, err := StringifyValue(field)
+	return str, err
 }
 
 // SetField sets the field of the object using a string that
@@ -112,6 +137,12 @@ func ParseString(t reflect.Type, value string) (reflect.Value, error) {
 			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T: %v", i, err)
 		}
 		return reflect.ValueOf(int8(i)), nil
+	case reflect.Int16:
+		i, err := strconv.ParseInt(value, 10, 16)
+		if err != nil {
+			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T: %v", i, err)
+		}
+		return reflect.ValueOf(int16(i)), nil
 	case reflect.Int32:
 		i, err := strconv.ParseInt(value, 10, 32)
 		if err != nil {
@@ -140,6 +171,12 @@ func ParseString(t reflect.Type, value string) (reflect.Value, error) {
 			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T: %v", i, err)
 		}
 		return reflect.ValueOf(uint8(i)), nil
+	case reflect.Uint16:
+		i, err := strconv.ParseUint(value, 10, 16)
+		if err != nil {
+			return reflect.ValueOf(nil), fmt.Errorf("Failed to parse string to %T: %v", i, err)
+		}
+		return reflect.ValueOf(uint16(i)), nil
 	case reflect.Uint32:
 		i, err := strconv.ParseUint(value, 10, 32)
 		if err != nil {
