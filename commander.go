@@ -57,45 +57,55 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 		return errors.WithStack(err)
 	}
 
-	// Parse the arguments into that flagset
-	err = flagset.Parse(arguments)
-	if err != nil {
-		return errors.WithStack(err)
-	}
 	return commander.RunCLIWithFlagSet(app, arguments, flagset)
 }
 
 // RunCLIWithFlagSet runs the cli with the flagset passed in. This is useful for ad-hoc flags that
 // are not bound to fields within the application.
-func (commander Commander) RunCLIWithFlagSet(app interface{}, arguments []string, flagset *flag.FlagSet) error {
+func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, flagset *flag.FlagSet) error {
+	// Parse the arguments into that flagset
+	err := flagset.Parse(args)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Execute the first argument
-	args := flagset.Args()
+	args = flagset.Args()
 	if len(args) == 0 {
 		args = []string{"basecommand"}
 	}
+	cmd := args[0]
 
 	// Check first if there is a subcommand with this name
-	if subapp, err := commander.SubCommand(app, args[0]); err != nil {
+	if subapp, err := commander.SubCommand(app, cmd); err != nil {
 		commander.PrintUsage(app)
-		return errors.Wrapf(err, "Failed to search for subcommand %v", args[0])
+		return errors.Wrapf(err, "Failed to search for subcommand %v", cmd)
 	} else if subapp != nil {
 		return commander.RunCLI(subapp, args[1:])
 	}
 
 	// Then check if there is a command with this name, and exit if there are errors
-	if found, err := commander.HasCommand(app, args[0]); err != nil {
+	if found, err := commander.HasCommand(app, cmd); err != nil {
 		commander.PrintUsage(app)
-		return errors.Wrapf(err, "Failed to search for command %v", args[0])
+		return errors.Wrapf(err, "Failed to search for command %v", cmd)
 	} else if !found {
 		commander.PrintUsage(app)
-		return fmt.Errorf("Failed to find command %v", args[0])
+		return fmt.Errorf("Failed to find command %v", cmd)
 	}
 
+	// Reparse flags to populate some of the flags that the default package might have
+	// missed
+	err = flagset.Parse(args[1:])
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	args = flagset.Args()
+
 	// Finally run that command if everything seems fine
-	err := commander.RunCommand(app, args[0], args[1:]...)
+	err = commander.RunCommand(app, cmd, args...)
 	if err != nil {
 		commander.PrintUsage(app)
-		return errors.Wrapf(err, "Failed to run command %v", args[0])
+		return errors.Wrapf(err, "Failed to run command %v", cmd)
 	}
 	return nil
 }

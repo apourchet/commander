@@ -140,8 +140,17 @@ func TestFlagOrder(t *testing.T) {
 	app := &Application{
 		SubApp: &SubApplication{},
 	}
-	args := []string{"--intflag", "10", "subapp", "opthree"}
+	args := []string{"--intflag", "11", "opone", "--intflag", "10", "test"}
 	err := commander.New().RunCLI(app, args)
+	require.NoError(t, err)
+	require.Equal(t, 1, app.count)
+	require.Equal(t, 10, app.IntFlag)
+
+	app = &Application{
+		SubApp: &SubApplication{},
+	}
+	args = []string{"--intflag", "10", "subapp", "opthree"}
+	err = commander.New().RunCLI(app, args)
 	require.NoError(t, err)
 	require.Equal(t, 1, app.SubApp.count)
 	require.Equal(t, 10, app.IntFlag)
