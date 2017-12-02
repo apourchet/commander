@@ -22,7 +22,7 @@ type FlagTarget struct {
 // NewFlagTarget creates a new FlagTarget that points to the object given.
 func NewFlagTarget(obj interface{}, field reflect.StructField, usage string) *FlagTarget {
 	def, _ := utils.GetFieldValue(obj, field.Name)
-	usage = fmt.Sprintf("%s (default=%s)", usage, def)
+	usage = fmt.Sprintf("%s (default %s)", usage, def)
 	flagtarget := &FlagTarget{
 		object: obj,
 		field:  field,
