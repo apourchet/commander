@@ -104,3 +104,31 @@ func TestFlagParsingDuration(t *testing.T) {
 	require.Equal(t, 4*time.Hour, app.Duration)
 	require.Equal(t, 2*time.Second, app.Nested.Duration)
 }
+
+type FlagTesterSliced struct {
+	Slice []interface{} `commander:"flagslice"`
+}
+
+type IntFlagStruct struct {
+	Value int `commander:"flag=intflag2,An int"`
+}
+
+type BoolFlagStruct struct {
+	Value bool `commander:"flag=boolflag2,A bool"`
+}
+
+func TestFlagParsingSliced(t *testing.T) {
+	cmd := commander.New()
+
+	intflag := &IntFlagStruct{}
+	boolflag := &BoolFlagStruct{}
+	app := &FlagTesterSliced{
+		Slice: []interface{}{intflag, boolflag},
+	}
+	flagset, err := cmd.GetFlagSet(app)
+	require.NoError(t, err)
+	args := []string{"--intflag2", "10", "--boolflag2"}
+	flagset.Parse(args)
+	require.Equal(t, 10, intflag.Value)
+	require.True(t, boolflag.Value)
+}

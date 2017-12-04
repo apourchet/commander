@@ -21,12 +21,18 @@ const (
 	// SubcommandDirective indicates a subcommand
 	SubcommandDirective = "subcommand"
 
-	// FlagStructDirective indicates that the field
-	// is a struct containing flags to inject
+	// FlagStructDirective indicates that the field is a struct containing flags to
+	// inject. Commander will go into that struct and populate its fields if they
+	// are tagged with a FlagDirective.
 	FlagStructDirective = "flagstruct"
 
-	// FlagDirective indicates that this field should be populated using
-	// the command line flags
+	// FlagSliceDirective indicates that the field is a slice containing structs
+	// that need flags to be injected into. Commander will go through each struct
+	// in the slice as though it had a FlagStruct directive.
+	FlagSliceDirective = "flagslice"
+
+	// FlagDirective indicates that this field should be populated using the command
+	// line flags
 	FlagDirective = "flag"
 )
 
@@ -257,6 +263,24 @@ func (commander Commander) setupFlagSet(app interface{}, setter *flagSetter) err
 				}
 				if err := commander.setupFlagSet(fieldval.Interface(), setter); err != nil {
 					return errors.Wrap(err, "Failed to get flagset for sub-struct")
+				}
+			} else if split[0] == FlagSliceDirective {
+				v, valid := utils.DerefValue(app)
+				if !valid || v.Kind() != reflect.Struct {
+					// The subapp is nil or not a struct
+					return nil
+				}
+				fieldval := v.FieldByName(field.Name)
+				if !fieldval.IsValid() {
+					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
+				} else if fieldval.Kind() != reflect.Slice {
+					return fmt.Errorf("FlagSlice directive should only be used on slice fields")
+				}
+				for i := 0; i < fieldval.Len(); i++ {
+					item := fieldval.Index(i)
+					if err := commander.setupFlagSet(item.Interface(), setter); err != nil {
+						return errors.Wrap(err, "Failed to get flagset for slice element")
+					}
 				}
 			}
 		}
