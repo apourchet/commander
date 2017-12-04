@@ -199,6 +199,8 @@ func (commander Commander) SubCommand(app interface{}, cmd string) (interface{},
 
 // HasCommand returns true if the application implements a specific command; and false otherwise.
 func (commander Commander) HasCommand(app interface{}, cmd string) (bool, error) {
+	cmd = strings.Replace(cmd, "-", "", -1)
+	cmd = strings.Replace(cmd, "_", "", -1)
 	apptype := reflect.TypeOf(app)
 	for i := 0; i < apptype.NumMethod(); i++ {
 		method := apptype.Method(i)
