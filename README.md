@@ -93,6 +93,3 @@ $ go run test/main.go read README.md README.md
 $ go run test/main.go http read http://www.google.com
 $ go run test/main.go -dry-run=true rm README.md
 ```
-
-## TODOs 
-- Get flags to work with non-pointer structs for subcommands

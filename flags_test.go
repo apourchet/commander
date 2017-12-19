@@ -55,7 +55,10 @@ func TestFlagDefaults(t *testing.T) {
 type FlagTesterNested struct {
 	Toplevel bool `commander:"flag=toplevel,A toplevel bool"`
 
-	Nested *FlagTester `commander:"flagstruct"`
+	Nested      *FlagTester `commander:"flagstruct"`
+	NestedNoPtr struct {
+		Int int `commander:"flag=innerint"`
+	} `commander:"flagstruct"`
 }
 
 func TestFlagParsingNested(t *testing.T) {
@@ -74,17 +77,18 @@ func TestFlagParsingNested(t *testing.T) {
 	app = &FlagTesterNested{Nested: &FlagTester{}}
 	flagset, err = cmd.GetFlagSet(app)
 	require.NoError(t, err)
-	args = []string{"--boolflag", "--toplevel", "--stringflag", "somestring", "--intflag", "10"}
+	args = []string{"--boolflag", "--toplevel", "--stringflag", "somestring", "--intflag", "10", "--innerint=10"}
 	flagset.Parse(args)
 	require.Equal(t, true, app.Toplevel)
 	require.Equal(t, true, app.Nested.Bool)
 	require.Equal(t, 10, app.Nested.Int)
 	require.Equal(t, "somestring", app.Nested.String)
+	require.Equal(t, 10, app.NestedNoPtr.Int)
 }
 
 type FlagDurationTester struct {
-	Duration time.Duration            `commander:"flag=dur,A duration"`
-	Nested   *OtherFlagDurationTester `commander:"flagstruct"`
+	Duration time.Duration           `commander:"flag=dur,A duration"`
+	Nested   OtherFlagDurationTester `commander:"flagstruct"`
 }
 
 type OtherFlagDurationTester struct {
@@ -95,7 +99,7 @@ func TestFlagParsingDuration(t *testing.T) {
 	cmd := commander.New()
 
 	app := &FlagDurationTester{
-		Nested: &OtherFlagDurationTester{},
+		Nested: OtherFlagDurationTester{},
 	}
 	flagset, err := cmd.GetFlagSet(app)
 	require.NoError(t, err)

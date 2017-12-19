@@ -263,7 +263,11 @@ func (commander Commander) setupFlagSet(app interface{}, setter *flagSetter) err
 				if !fieldval.IsValid() {
 					return fmt.Errorf("Failed to get flags from field %v of type %v", field.Name, st.Name())
 				}
-				if err := commander.setupFlagSet(fieldval.Interface(), setter); err != nil {
+				fieldIface := fieldval.Interface()
+				if fieldval.Type().Kind() == reflect.Struct {
+					fieldIface = fieldval.Addr().Interface()
+				}
+				if err := commander.setupFlagSet(fieldIface, setter); err != nil {
 					return errors.Wrap(err, "Failed to get flagset for sub-struct")
 				}
 			} else if split[0] == FlagSliceDirective {
