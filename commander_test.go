@@ -11,7 +11,8 @@ import (
 )
 
 type Application struct {
-	count int
+	count          int
+	postFlagHooked bool
 
 	IntFlag int `commander:"flag=intflag,An int"`
 
@@ -32,6 +33,11 @@ func (app *Application) OpTwo(i int) {
 }
 
 func (app *Application) CLIName() string { return "myapp" }
+
+func (app *Application) PostFlagParse() error {
+	app.postFlagHooked = (app.IntFlag == 10)
+	return nil
+}
 
 func (app *Application) OpVariadic(name string, names []string) {
 	app.count += len(names)
@@ -145,6 +151,7 @@ func TestFlagOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, app.count)
 	require.Equal(t, 10, app.IntFlag)
+	require.True(t, app.postFlagHooked)
 
 	app = &Application{
 		SubApp: &SubApplication{},
@@ -155,6 +162,7 @@ func TestFlagOrder(t *testing.T) {
 	require.Equal(t, 1, app.SubApp.count)
 	require.Equal(t, 10, app.IntFlag)
 	require.Equal(t, 0, app.SubApp.SubIntFlag)
+	require.True(t, app.postFlagHooked)
 
 	app = &Application{
 		SubApp: &SubApplication{},

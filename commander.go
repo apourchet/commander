@@ -36,8 +36,16 @@ const (
 	FlagDirective = "flag"
 )
 
-type namedCLI interface {
+// NamedCLI is the interface that the application should implement to change the default displayed
+// name when Usage is called.
+type NamedCLI interface {
 	CLIName() string
+}
+
+// PostFlagParseHook is the interface that the application should implement to receive a callback
+// when the flags have been injected into it.
+type PostFlagParseHook interface {
+	PostFlagParse() error
 }
 
 // Commander is the struct that CLI applications will interact with
@@ -87,6 +95,9 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, fla
 		commander.PrintUsage(app)
 		return errors.Wrapf(err, "Failed to search for subcommand %v", cmd)
 	} else if subapp != nil {
+		if err = executeHook(app); err != nil {
+			return errors.WithStack(err)
+		}
 		return commander.RunCLI(subapp, args[1:])
 	}
 
@@ -106,6 +117,11 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, fla
 		return errors.WithStack(err)
 	}
 	args = flagset.Args()
+
+	// Execute post flag parse hook
+	if err = executeHook(app); err != nil {
+		return errors.WithStack(err)
+	}
 
 	// Finally run that command if everything seems fine
 	err = commander.RunCommand(app, cmd, args...)
@@ -215,7 +231,7 @@ func (commander Commander) HasCommand(app interface{}, cmd string) (bool, error)
 // return a flagset that will work for subcommands of that application.
 func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
 	appname := "commander-cli"
-	if casted, ok := app.(namedCLI); ok {
+	if casted, ok := app.(NamedCLI); ok {
 		appname = casted.CLIName()
 	}
 
@@ -340,4 +356,13 @@ func parseSubcommandDirective(directive string) (cmd string, description string)
 		return split[0], split[1]
 	}
 	return split[0], "No description for this subcommand"
+}
+
+func executeHook(app interface{}) error {
+	if hook, ok := app.(PostFlagParseHook); ok {
+		if err := hook.PostFlagParse(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
 }
