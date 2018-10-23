@@ -155,17 +155,17 @@ func (commander Commander) RunCommand(app interface{}, cmd string, args ...strin
 		}
 
 		// Make sure we have enough args for this command
-		inputsize := method.Type.NumIn()
-		if len(args) < inputsize-1 && method.Type.In(inputsize-1).Kind() != reflect.Slice {
-			return fmt.Errorf("Command %v requires %v arguments, have %v", cmd, inputsize-1, len(args))
-		} else if len(args) < inputsize-1 {
+		inputsize := method.Type.NumIn() - 1
+		if len(args) != inputsize && method.Type.In(inputsize).Kind() != reflect.Slice {
+			return fmt.Errorf("Command %v requires %v arguments, have %v", cmd, inputsize, len(args))
+		} else if len(args) < inputsize {
 			args = append(args, "[]")
-		} else if len(args) > inputsize-1 || method.Type.In(inputsize-1).Kind() == reflect.Slice {
+		} else if len(args) > inputsize || method.Type.In(inputsize).Kind() == reflect.Slice {
 			// Then we consider that the extra arguments are just a list of strings
-			extras := args[inputsize-2:]
+			extras := args[inputsize-1:]
 			bytes, _ := json.Marshal(extras)
-			args[inputsize-2] = string(bytes)
-			args = args[:inputsize-1]
+			args[inputsize-1] = string(bytes)
+			args = args[:inputsize]
 		}
 
 		in := make([]reflect.Value, len(args)+1)

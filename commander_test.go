@@ -238,10 +238,15 @@ type SubCmd2 struct {
 }
 
 func (sub *SubCmd2) CommanderDefault(arg string) {
-	if arg != "arg" {
-		return
+	if arg == "arg" {
+		sub.count++
 	}
-	sub.count++
+}
+
+func (sub *SubCmd2) Cmd1(first string, others []string) {
+	if first == "first" && len(others) == 2 {
+		sub.count++
+	}
 }
 
 func TestApplication2(t *testing.T) {
@@ -259,5 +264,20 @@ func TestApplication2(t *testing.T) {
 		}
 		err := commander.New().RunCLI(app, []string{"subcmd2"})
 		require.Error(t, err)
+	})
+	t.Run("too_many_arguments", func(t *testing.T) {
+		app := &Application2{
+			SubCmd: &SubCmd2{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd2", "arg", "arg2"})
+		require.Error(t, err)
+	})
+	t.Run("last_arg_string_array", func(t *testing.T) {
+		app := &Application2{
+			SubCmd: &SubCmd2{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd2", "cmd1", "first", "second", "third"})
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubCmd.count)
 	})
 }
