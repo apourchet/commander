@@ -18,6 +18,10 @@ const (
 	// FieldTag is the name of the field tag that commander uses
 	FieldTag = "commander"
 
+	// DefaultCommand is the default name of the method that will be called on the application
+	// objects.
+	DefaultCommand = "CommanderDefault"
+
 	// SubcommandDirective indicates a subcommand
 	SubcommandDirective = "subcommand"
 
@@ -86,7 +90,7 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, fla
 	// Execute the first argument
 	args = flagset.Args()
 	if len(args) == 0 {
-		args = []string{"basecommand"}
+		args = []string{DefaultCommand}
 	}
 	cmd := args[0]
 
@@ -106,8 +110,16 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, fla
 		commander.PrintUsage(app)
 		return errors.Wrapf(err, "Failed to search for command %v", cmd)
 	} else if !found {
-		commander.PrintUsage(app)
-		return fmt.Errorf("Failed to find command %v", cmd)
+		if foundDefault, err := commander.HasCommand(app, DefaultCommand); err != nil {
+			commander.PrintUsage(app)
+			return errors.Wrapf(err, "Failed to search for command %v", cmd)
+		} else if !foundDefault {
+			commander.PrintUsage(app)
+			return fmt.Errorf("Failed to find command %v or %v", cmd, DefaultCommand)
+		} else {
+			cmd = DefaultCommand
+			args = append([]string{DefaultCommand}, args...)
+		}
 	}
 
 	// Reparse flags to populate some of the flags that the default package might have
@@ -138,7 +150,7 @@ func (commander Commander) RunCommand(app interface{}, cmd string, args ...strin
 	for i := 0; i < apptype.NumMethod(); i++ {
 		// Find the right method
 		method := apptype.Method(i)
-		if strings.ToLower(method.Name) != cmd {
+		if strings.ToLower(method.Name) != strings.ToLower(cmd) {
 			continue
 		}
 
@@ -217,6 +229,7 @@ func (commander Commander) SubCommand(app interface{}, cmd string) (interface{},
 func (commander Commander) HasCommand(app interface{}, cmd string) (bool, error) {
 	cmd = strings.Replace(cmd, "-", "", -1)
 	cmd = strings.Replace(cmd, "_", "", -1)
+	cmd = strings.ToLower(cmd)
 	apptype := reflect.TypeOf(app)
 	for i := 0; i < apptype.NumMethod(); i++ {
 		method := apptype.Method(i)

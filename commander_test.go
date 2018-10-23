@@ -200,10 +200,10 @@ Sub-Commands:
   subapp2  |  Use subapp commands
 `
 	usage := cmd.Usage(app)
-	AssertEqualLines(t, expected, usage)
+	assertEqualLines(t, expected, usage)
 }
 
-func AssertEqualLines(t *testing.T, expected, actual string) {
+func assertEqualLines(t *testing.T, expected, actual string) {
 	swapped := false
 	small, big := strings.Split(expected, "\n"), strings.Split(actual, "\n")
 	if len(small) > len(big) {
@@ -227,4 +227,37 @@ func AssertEqualLines(t *testing.T, expected, actual string) {
 	for i := len(small); i < len(big); i++ {
 		assert.Fail(t, symbol+big[i])
 	}
+}
+
+type Application2 struct {
+	SubCmd *SubCmd2 `commander:"subcommand=subcmd2"`
+}
+
+type SubCmd2 struct {
+	count int
+}
+
+func (sub *SubCmd2) CommanderDefault(arg string) {
+	if arg != "arg" {
+		return
+	}
+	sub.count++
+}
+
+func TestApplication2(t *testing.T) {
+	t.Run("calls_commander_default", func(t *testing.T) {
+		app := &Application2{
+			SubCmd: &SubCmd2{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd2", "arg"})
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubCmd.count)
+	})
+	t.Run("not_enough_arguments", func(t *testing.T) {
+		app := &Application2{
+			SubCmd: &SubCmd2{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd2"})
+		require.Error(t, err)
+	})
 }
