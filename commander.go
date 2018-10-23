@@ -243,7 +243,7 @@ func (commander Commander) HasCommand(app interface{}, cmd string) (bool, error)
 // GetFlagSet returns a flagset that corresponds to an application. This does not get
 // return a flagset that will work for subcommands of that application.
 func (commander Commander) GetFlagSet(app interface{}) (*flag.FlagSet, error) {
-	appname := "commander-cli"
+	appname := "CLI"
 	if casted, ok := app.(NamedCLI); ok {
 		appname = casted.CLIName()
 	}
@@ -336,22 +336,34 @@ func (commander Commander) Usage(app interface{}) string {
 
 	// Then print subcommands
 	st, valid := utils.DerefType(app)
-	if valid && st.NumField() > 0 {
-		fmt.Fprintf(&buf, "\nSub-Commands:\n")
-		for i := 0; i < st.NumField(); i++ {
-			field := st.Field(i)
-			if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-				split := strings.Split(alias, "=")
-				if len(split) != 2 || split[0] != SubcommandDirective {
-					continue
-				}
+	if !valid {
+		return buf.String()
+	}
 
-				// If this field has subflags, recurse inside that
-				cmd, desc := parseSubcommandDirective(split[1])
-				fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
+	directives := []string{}
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
+			split := strings.Split(alias, "=")
+			if len(split) != 2 || split[0] != SubcommandDirective {
+				continue
 			}
+
+			directives = append(directives, split[1])
 		}
 	}
+
+	if len(directives) == 0 {
+		return buf.String()
+	}
+
+	fmt.Fprintf(&buf, "\nSub-Commands:\n")
+	for _, directive := range directives {
+		// If this field has subflags, recurse inside that
+		cmd, desc := parseSubcommandDirective(directive)
+		fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
+	}
+
 	return buf.String()
 }
 

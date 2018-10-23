@@ -69,6 +69,28 @@ func (app *SubSubApplication) OpDeep() {
 	app.count++
 }
 
+type Application2 struct {
+	SubCmd *SubCmd2 `commander:"subcommand=subcmd2"`
+}
+
+type SubCmd2 struct {
+	Fl int `commander:"flag=anint"`
+
+	count int
+}
+
+func (sub *SubCmd2) CommanderDefault(arg string) {
+	if arg == "arg" {
+		sub.count++
+	}
+}
+
+func (sub *SubCmd2) Cmd1(first string, others []string) {
+	if first == "first" && len(others) == 2 {
+		sub.count++
+	}
+}
+
 func TestCommanderBasics(t *testing.T) {
 	cmd := commander.New()
 	cmd.UsageOutput = ioutil.Discard
@@ -186,12 +208,13 @@ func TestFlagOrder(t *testing.T) {
 }
 
 func TestUsage(t *testing.T) {
-	app := &Application{
-		IntFlag: 10,
-		SubApp:  &SubApplication{},
-	}
-	cmd := commander.New()
-	expected := `Usage of myapp:
+	t.Run("top_level", func(t *testing.T) {
+		app := &Application{
+			IntFlag: 10,
+			SubApp:  &SubApplication{},
+		}
+		cmd := commander.New()
+		expected := `Usage of myapp:
   -intflag value
     	An int (default 10)
 
@@ -199,8 +222,18 @@ Sub-Commands:
   subapp  |  Use subapp commands
   subapp2  |  Use subapp commands
 `
-	usage := cmd.Usage(app)
-	assertEqualLines(t, expected, usage)
+		usage := cmd.Usage(app)
+		assertEqualLines(t, expected, usage)
+	})
+	t.Run("no_subcommand", func(t *testing.T) {
+		cmd := commander.New()
+		expected := `Usage of CLI:
+  -anint value
+    	No usage found for this flag. (default 0)
+`
+		usage := cmd.Usage(&SubCmd2{})
+		assertEqualLines(t, expected, usage)
+	})
 }
 
 func assertEqualLines(t *testing.T, expected, actual string) {
@@ -226,26 +259,6 @@ func assertEqualLines(t *testing.T, expected, actual string) {
 
 	for i := len(small); i < len(big); i++ {
 		assert.Fail(t, symbol+big[i])
-	}
-}
-
-type Application2 struct {
-	SubCmd *SubCmd2 `commander:"subcommand=subcmd2"`
-}
-
-type SubCmd2 struct {
-	count int
-}
-
-func (sub *SubCmd2) CommanderDefault(arg string) {
-	if arg == "arg" {
-		sub.count++
-	}
-}
-
-func (sub *SubCmd2) Cmd1(first string, others []string) {
-	if first == "first" && len(others) == 2 {
-		sub.count++
 	}
 }
 
