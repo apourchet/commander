@@ -17,23 +17,38 @@ type FlagTester struct {
 func TestFlagParsing(t *testing.T) {
 	cmd := commander.New()
 
-	app := &FlagTester{}
-	flagset, err := cmd.GetFlagSet(app)
-	require.NoError(t, err)
-	args := []string{"--boolflag=true", "--stringflag", "somestring", "--intflag", "10"}
-	flagset.Parse(args)
-	require.True(t, app.Bool)
-	require.Equal(t, "somestring", app.String)
-	require.Equal(t, 10, app.Int)
+	t.Run("1", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app)
+		require.NoError(t, err)
+		args := []string{"--boolflag=true", "--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		require.True(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
 
-	app = &FlagTester{}
-	flagset, err = cmd.GetFlagSet(app)
-	require.NoError(t, err)
-	args = []string{"--boolflag", "--stringflag", "somestring", "--intflag", "10"}
-	flagset.Parse(args)
-	require.True(t, app.Bool)
-	require.Equal(t, "somestring", app.String)
-	require.Equal(t, 10, app.Int)
+	t.Run("2", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app)
+		require.NoError(t, err)
+		args := []string{"--boolflag", "--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		require.True(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
+
+	t.Run("3", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app)
+		require.NoError(t, err)
+		args := []string{"--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		require.False(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
 }
 
 func TestFlagDefaults(t *testing.T) {

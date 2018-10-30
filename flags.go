@@ -21,8 +21,6 @@ type flagTarget struct {
 
 // newFlagTarget creates a new FlagTarget that points to the object given.
 func newFlagTarget(obj interface{}, field reflect.StructField, usage string) *flagTarget {
-	def, _ := utils.GetFieldValue(obj, field.Name)
-	usage = fmt.Sprintf(`%s (default: "%s")`, usage, def)
 	flagtarget := &flagTarget{
 		object: obj,
 		field:  field,
@@ -31,10 +29,22 @@ func newFlagTarget(obj interface{}, field reflect.StructField, usage string) *fl
 	return flagtarget
 }
 
+func (target *flagTarget) Usage() string {
+	def, _ := utils.GetFieldValue(target.object, target.field.Name)
+	if target.field.Type.Kind() == reflect.String {
+		def = fmt.Sprintf(`"%s"`, def)
+	}
+	return fmt.Sprintf(`%s (type: %s, default: %s)`, target.usage, target.field.Type.Kind(), def)
+}
+
 // String returns the stringified value of the object's field that the FlagTarget is bound to.
 func (target *flagTarget) String() string {
-	// TODO: return default value
 	return ""
+}
+
+// IsBoolFlag returns false always so that the flag usage does not show "value" after each flag.
+func (target *flagTarget) IsBoolFlag() bool {
+	return target.field.Type.Kind() == reflect.Bool
 }
 
 // Set sets the value of the field that the FlagTarget is bound to.
@@ -63,19 +73,6 @@ func newFlagSetter(flagset *flag.FlagSet) *flagSetter {
 // SetFlag creates a flag on the flagset given so that when the flagset.
 func (setter *flagSetter) setFlag(obj interface{}, field reflect.StructField, directive string) error {
 	name, usage := parseFlagDirective(directive)
-
-	if field.Type.Kind() == reflect.Bool {
-		// Bool is special because it doesn't need a value
-		v := reflect.ValueOf(obj)
-		var ptr *bool
-		if v.Kind() == reflect.Ptr {
-			v = v.Elem().FieldByName(field.Name)
-			ptr = v.Addr().Interface().(*bool)
-			setter.flagset.BoolVar(ptr, name, *ptr, usage)
-			return nil
-		}
-	}
-
 	return setter.addTarget(name, obj, field, usage)
 }
 
@@ -83,7 +80,7 @@ func (setter *flagSetter) setFlag(obj interface{}, field reflect.StructField, di
 // setup to the internal flagset.
 func (setter *flagSetter) finish() {
 	for name, target := range setter.targets {
-		setter.flagset.Var(target, name, target.usage)
+		setter.flagset.Var(target, name, target.Usage())
 	}
 }
 

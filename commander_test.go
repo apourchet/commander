@@ -215,8 +215,8 @@ func TestUsage(t *testing.T) {
 		}
 		cmd := commander.New()
 		expected := `Usage of myapp:
-  -intflag value
-    	An int (default: "10")
+  -intflag
+    	An int (type: int, default: 10)
 
 Sub-Commands:
   subapp  |  Use subapp commands
@@ -228,8 +228,8 @@ Sub-Commands:
 	t.Run("no_subcommand", func(t *testing.T) {
 		cmd := commander.New()
 		expected := `Usage of CLI:
-  -anint value
-    	No usage found for this flag. (default: "0")
+  -anint
+    	No usage found for this flag. (type: int, default: 0)
 `
 		usage := cmd.Usage(&SubCmd2{})
 		assertEqualLines(t, expected, usage)
@@ -239,8 +239,30 @@ Sub-Commands:
 			Str string `commander:"flag=str"`
 		}{}
 		expected := `Usage of CLI:
-  -str value
-    	No usage found for this flag. (default: "")
+  -str
+    	No usage found for this flag. (type: string, default: "")
+`
+		usage := commander.New().Usage(app)
+		assertEqualLines(t, expected, usage)
+	})
+	t.Run("default_strings_types", func(t *testing.T) {
+		app := &struct {
+			Bool bool              `commander:"flag=b,A bool"`
+			Str  string            `commander:"flag=str"`
+			Strs []string          `commander:"flag=strs"`
+			Map  map[string]string `commander:"flag=map"`
+		}{
+			Bool: true,
+			Map:  map[string]string{"a": "b"},
+		}
+		expected := `Usage of CLI:
+  -b	A bool (type: bool, default: true)
+  -map
+    	No usage found for this flag. (type: map, default: {"a":"b"})
+  -str
+    	No usage found for this flag. (type: string, default: "")
+  -strs
+    	No usage found for this flag. (type: slice, default: null)
 `
 		usage := commander.New().Usage(app)
 		assertEqualLines(t, expected, usage)
