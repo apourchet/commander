@@ -216,7 +216,7 @@ func TestUsage(t *testing.T) {
 		cmd := commander.New()
 		expected := `Usage of myapp:
   -intflag value
-    	An int (default 10)
+    	An int (default: "10")
 
 Sub-Commands:
   subapp  |  Use subapp commands
@@ -229,9 +229,20 @@ Sub-Commands:
 		cmd := commander.New()
 		expected := `Usage of CLI:
   -anint value
-    	No usage found for this flag. (default 0)
+    	No usage found for this flag. (default: "0")
 `
 		usage := cmd.Usage(&SubCmd2{})
+		assertEqualLines(t, expected, usage)
+	})
+	t.Run("empty_string_default", func(t *testing.T) {
+		app := &struct {
+			Str string `commander:"flag=str"`
+		}{}
+		expected := `Usage of CLI:
+  -str value
+    	No usage found for this flag. (default: "")
+`
+		usage := commander.New().Usage(app)
 		assertEqualLines(t, expected, usage)
 	})
 }
