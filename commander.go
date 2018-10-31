@@ -115,7 +115,10 @@ func (commander Commander) RunCLIWithFlagSet(app interface{}, args []string, fla
 			return errors.Wrapf(err, "Failed to search for command %v", cmd)
 		} else if !foundDefault {
 			commander.PrintUsage(app)
-			return fmt.Errorf("Failed to find command %v or %v", cmd, DefaultCommand)
+			if cmd != DefaultCommand {
+				return fmt.Errorf("Failed to find command %v or %v", cmd, DefaultCommand)
+			}
+			return fmt.Errorf("Failed to find default command %v", DefaultCommand)
 		} else {
 			cmd = DefaultCommand
 			args = append([]string{DefaultCommand}, args...)
