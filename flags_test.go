@@ -19,7 +19,7 @@ func TestFlagParsing(t *testing.T) {
 
 	t.Run("1", func(t *testing.T) {
 		app := &FlagTester{}
-		flagset, err := cmd.GetFlagSet(app)
+		flagset, err := cmd.GetFlagSet(app, "CLI")
 		require.NoError(t, err)
 		args := []string{"--boolflag=true", "--stringflag", "somestring", "--intflag", "10"}
 		flagset.Parse(args)
@@ -30,7 +30,7 @@ func TestFlagParsing(t *testing.T) {
 
 	t.Run("2", func(t *testing.T) {
 		app := &FlagTester{}
-		flagset, err := cmd.GetFlagSet(app)
+		flagset, err := cmd.GetFlagSet(app, "CLI")
 		require.NoError(t, err)
 		args := []string{"--boolflag", "--stringflag", "somestring", "--intflag", "10"}
 		flagset.Parse(args)
@@ -41,7 +41,7 @@ func TestFlagParsing(t *testing.T) {
 
 	t.Run("3", func(t *testing.T) {
 		app := &FlagTester{}
-		flagset, err := cmd.GetFlagSet(app)
+		flagset, err := cmd.GetFlagSet(app, "CLI")
 		require.NoError(t, err)
 		args := []string{"--stringflag", "somestring", "--intflag", "10"}
 		flagset.Parse(args)
@@ -58,7 +58,7 @@ func TestFlagDefaults(t *testing.T) {
 		String: "somestring",
 		Bool:   true,
 	}
-	flagset, err := cmd.GetFlagSet(app)
+	flagset, err := cmd.GetFlagSet(app, "CLI")
 	require.NoError(t, err)
 	args := []string{"--intflag", "10"}
 	flagset.Parse(args)
@@ -80,7 +80,7 @@ func TestFlagParsingNested(t *testing.T) {
 	cmd := commander.New()
 
 	app := &FlagTesterNested{Nested: &FlagTester{}}
-	flagset, err := cmd.GetFlagSet(app)
+	flagset, err := cmd.GetFlagSet(app, "CLI")
 	require.NoError(t, err)
 	args := []string{"--boolflag=true", "--toplevel=true", "--stringflag", "somestring", "--intflag", "10"}
 	flagset.Parse(args)
@@ -90,7 +90,7 @@ func TestFlagParsingNested(t *testing.T) {
 	require.Equal(t, "somestring", app.Nested.String)
 
 	app = &FlagTesterNested{Nested: &FlagTester{}}
-	flagset, err = cmd.GetFlagSet(app)
+	flagset, err = cmd.GetFlagSet(app, "CLI")
 	require.NoError(t, err)
 	args = []string{"--boolflag", "--toplevel", "--stringflag", "somestring", "--intflag", "10", "--innerint=10"}
 	flagset.Parse(args)
@@ -116,7 +116,7 @@ func TestFlagParsingDuration(t *testing.T) {
 	app := &FlagDurationTester{
 		Nested: OtherFlagDurationTester{},
 	}
-	flagset, err := cmd.GetFlagSet(app)
+	flagset, err := cmd.GetFlagSet(app, "CLI")
 	require.NoError(t, err)
 	args := []string{"--dur", "4h", "--otherdur", "2s"}
 	flagset.Parse(args)
@@ -144,7 +144,7 @@ func TestFlagParsingSliced(t *testing.T) {
 	app := &FlagTesterSliced{
 		Slice: []interface{}{intflag, boolflag},
 	}
-	flagset, err := cmd.GetFlagSet(app)
+	flagset, err := cmd.GetFlagSet(app, "CLI")
 	require.NoError(t, err)
 	args := []string{"--intflag2", "10", "--boolflag2"}
 	flagset.Parse(args)
