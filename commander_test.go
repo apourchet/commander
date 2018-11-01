@@ -1,6 +1,7 @@
 package commander_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -20,16 +21,23 @@ type Application struct {
 	SubApp2 *SubApplication `commander:"subcommand=subapp2,Use subapp commands"`
 }
 
-func (app *Application) OpOne(str string) {
+var errTest = fmt.Errorf("ERROR")
+
+func (app *Application) OpOne(str string) error {
 	if str == "test" {
 		app.count++
 	}
+	return nil
 }
 
 func (app *Application) OpTwo(i int) {
 	if i == 30 {
 		app.count++
 	}
+}
+
+func (app *Application) OpThree() error {
+	return errTest
 }
 
 func (app *Application) CLIName() string { return "myapp" }
@@ -49,6 +57,10 @@ type SubApplication struct {
 	SubIntFlag int `commander:"flag=subintflag,Another int"`
 
 	SubSubApp *SubSubApplication `commander:"subcommand=subsubapp,Use subsubapp commands"`
+}
+
+func (app *SubApplication) SubApp() error {
+	return errTest
 }
 
 func (app *SubApplication) OpThree() {
@@ -94,16 +106,28 @@ func (sub *SubCmd2) Cmd1(first string, others []string) {
 func TestCommanderBasics(t *testing.T) {
 	cmd := commander.New()
 	cmd.UsageOutput = ioutil.Discard
-
 	app := &Application{}
-	args := []string{"opone", "test"}
-	err := cmd.RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.count)
 
-	args = []string{"opone"}
-	err = cmd.RunCLI(app, args)
-	require.Error(t, err)
+	t.Run("1", func(t *testing.T) {
+		args := []string{"opone", "test"}
+		err := cmd.RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.count)
+	})
+
+	t.Run("2", func(t *testing.T) {
+		args := []string{"opone"}
+		err := cmd.RunCLI(app, args)
+		require.Error(t, err)
+	})
+
+	t.Run("3", func(t *testing.T) {
+		args := []string{"opthree"}
+		err := cmd.RunCLI(app, args)
+		require.Error(t, err)
+		require.Equal(t, "ERROR", err.Error())
+		require.Equal(t, errTest, err)
+	})
 }
 
 func TestCommanderInt(t *testing.T) {
@@ -133,13 +157,24 @@ func TestCommanderVariadic(t *testing.T) {
 }
 
 func TestCommanderSubcommand(t *testing.T) {
-	app := &Application{
-		SubApp: &SubApplication{},
-	}
-	args := []string{"subapp", "opthree"}
-	err := commander.New().RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.SubApp.count)
+	t.Run("1", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"subapp", "opthree"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubApp.count)
+	})
+
+	t.Run("2", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"subapp"}
+		err := commander.New().RunCLI(app, args)
+		require.Equal(t, errTest, err)
+	})
 }
 
 func TestSubcommandArguments(t *testing.T) {
@@ -269,32 +304,6 @@ Sub-Commands:
 	})
 }
 
-func assertEqualLines(t *testing.T, expected, actual string) {
-	swapped := false
-	small, big := strings.Split(expected, "\n"), strings.Split(actual, "\n")
-	if len(small) > len(big) {
-		small, big = big, small
-		swapped = true
-	}
-
-	for i := range small {
-		if !swapped {
-			assert.Equal(t, small[i], big[i])
-		} else {
-			assert.Equal(t, big[i], small[i])
-		}
-	}
-
-	symbol := "+"
-	if swapped {
-		symbol = "-"
-	}
-
-	for i := len(small); i < len(big); i++ {
-		assert.Fail(t, symbol+big[i])
-	}
-}
-
 func TestApplication2(t *testing.T) {
 	t.Run("calls_commander_default", func(t *testing.T) {
 		app := &Application2{
@@ -326,4 +335,30 @@ func TestApplication2(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, app.SubCmd.count)
 	})
+}
+
+func assertEqualLines(t *testing.T, expected, actual string) {
+	swapped := false
+	small, big := strings.Split(expected, "\n"), strings.Split(actual, "\n")
+	if len(small) > len(big) {
+		small, big = big, small
+		swapped = true
+	}
+
+	for i := range small {
+		if !swapped {
+			assert.Equal(t, small[i], big[i])
+		} else {
+			assert.Equal(t, big[i], small[i])
+		}
+	}
+
+	symbol := "+"
+	if swapped {
+		symbol = "-"
+	}
+
+	for i := len(small); i < len(big); i++ {
+		assert.Fail(t, symbol+big[i])
+	}
 }

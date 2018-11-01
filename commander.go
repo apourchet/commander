@@ -84,173 +84,52 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			return errors.WithStack(err)
 		}
 
-		if arguments = flagset.Args(); len(arguments) == 0 {
-			arguments = []string{DefaultCommand}
-		} else {
+		if arguments = flagset.Args(); len(arguments) > 0 {
+			if subapp, err := subCommand(app, arguments[0]); err != nil {
+				return errors.Wrapf(err, "failed to search for subcommand %v", arguments[0])
+			} else if subapp != nil {
+				if err = executeHook(app); err != nil {
+					return errors.WithStack(err)
+				}
+				cumulativeCommands = append(cumulativeCommands, arguments[0])
+				app = subapp
+				arguments = arguments[1:]
+				appname = getCLIName(originalApp, cumulativeCommands...)
+				continue
+			}
+		}
+
+		commands := []string{}
+		if len(cumulativeCommands) > 0 {
+			prevCmd := cumulativeCommands[len(cumulativeCommands)-1]
+			commands = []string{prevCmd}
+		}
+		if len(arguments) > 0 {
+			commands = append([]string{arguments[0]}, commands...)
 			cumulativeCommands = append(cumulativeCommands, arguments[0])
 		}
+		commands = append(commands, DefaultCommand)
 
-		subapp, err := commander.runCLIWithFlagSet(app, arguments, flagset)
+		cmd, err := findCommand(app, commands)
 		if err != nil {
-			commander.PrintUsage(app, appname)
 			return err
-		} else if subapp == nil {
-			// Finished execution of CLI.
-			return nil
-		}
-		app = subapp
-		arguments = arguments[1:]
-		appname = getCLIName(originalApp, cumulativeCommands...)
-	}
-}
-
-// RunCLIWithFlagSet runs the cli with the flagset passed in. This is useful for ad-hoc flags that
-// are not bound to fields within the application.
-func (commander Commander) runCLIWithFlagSet(app interface{}, args []string, flagset *flag.FlagSet) (interface{}, error) {
-	cmd := args[0]
-
-	// Check first if there is a subcommand with this name
-	if subapp, err := commander.subCommand(app, cmd); err != nil {
-		return nil, errors.Wrapf(err, "failed to search for subcommand %v", cmd)
-	} else if subapp != nil {
-		if err = executeHook(app); err != nil {
-			return nil, errors.WithStack(err)
-		}
-		return subapp, nil
-	}
-
-	// Then check if there is a command with this name, and exit if there are errors
-	if found, err := commander.hasCommand(app, cmd); err != nil {
-		return nil, errors.Wrapf(err, "failed to search for command %v", cmd)
-	} else if !found {
-		if foundDefault, err := commander.hasCommand(app, DefaultCommand); err != nil {
-			return nil, errors.Wrapf(err, "failed to search for command %v", cmd)
-		} else if !foundDefault {
-			if cmd != DefaultCommand {
-				return nil, fmt.Errorf("failed to find method for %v or default command", cmd)
-			}
-			return nil, fmt.Errorf("failed to find default command")
-		} else {
-			cmd = DefaultCommand
-			args = append([]string{DefaultCommand}, args...)
-		}
-	}
-
-	return nil, commander.executeCommand(app, cmd, args, flagset)
-}
-
-func (commander Commander) executeCommand(app interface{}, cmd string, args []string, flagset *flag.FlagSet) error {
-	// Reparse flags to populate some of the flags that the default package might have
-	// missed
-	if err := flagset.Parse(args[1:]); err != nil {
-		return errors.WithStack(err)
-	}
-	args = flagset.Args()
-
-	// Execute post flag parse hook
-	if err := executeHook(app); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Finally run that command if everything seems fine
-	if err := commander.RunCommand(app, cmd, args...); err != nil {
-		return errors.Wrapf(err, "failed to run command")
-	}
-	return nil
-}
-
-// RunCommand runs a specific command of the application with arguments.
-func (commander Commander) RunCommand(app interface{}, cmd string, args ...string) error {
-	apptype := reflect.TypeOf(app)
-	for i := 0; i < apptype.NumMethod(); i++ {
-		// Find the right method
-		method := apptype.Method(i)
-		if strings.ToLower(method.Name) != normalizeCommand(cmd) {
-			continue
+		} else if cmd == "" {
+			commander.PrintUsage(app, appname)
+			return fmt.Errorf("failed to find possible method: %v", commands)
+		} else if len(arguments) > 0 && cmd == arguments[0] {
+			arguments = arguments[1:]
 		}
 
-		// Make sure we have enough args for this command
-		inputsize := method.Type.NumIn() - 1
-		if len(args) != inputsize && method.Type.In(inputsize).Kind() != reflect.Slice {
-			return fmt.Errorf("command requires %v arguments, have %v", inputsize, len(args))
-		} else if len(args) < inputsize {
-			args = append(args, "[]")
-		} else if len(args) > inputsize || method.Type.In(inputsize).Kind() == reflect.Slice {
-			// Then we consider that the extra arguments are just a list of strings
-			extras := args[inputsize-1:]
-			bytes, _ := json.Marshal(extras)
-			args[inputsize-1] = string(bytes)
-			args = args[:inputsize]
+		err = executeCommand(app, cmd, arguments, flagset)
+		if err != nil && !isApplicationError(err) {
+			commander.PrintUsage(app, appname)
+			return fmt.Errorf("failed to run application: %v", err)
+		} else if err != nil {
+			inner := err.(applicationError)
+			return inner.error
 		}
-
-		in := make([]reflect.Value, len(args)+1)
-		in[0] = reflect.ValueOf(app)
-		for i, arg := range args {
-			t := method.Type.In(i + 1)
-			param, err := utils.ParseString(t, arg)
-			if err != nil {
-				return errors.Wrapf(err, "failed to parse string into function argument")
-			}
-			in[i+1] = param
-		}
-		method.Func.Call(in)
 		return nil
 	}
-	return fmt.Errorf("failed to find method %v", cmd)
-}
-
-// subCommand returns the subcommand struct that corresponds to the command cmd. If none is found,
-// subCommand returns nil, nil.
-func (commander Commander) subCommand(app interface{}, cmd string) (interface{}, error) {
-	st, valid := utils.DerefType(app)
-	if !valid {
-		return nil, fmt.Errorf("application needs to be a struct or a pointer to a struct")
-	}
-	for i := 0; i < st.NumField(); i++ {
-		field := st.Field(i)
-		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-			split := strings.Split(alias, "=")
-			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
-				return nil, fmt.Errorf("malformed tag on application: %v", alias)
-			}
-
-			// If this field has subflags, recurse inside that
-			if split[0] != SubcommandDirective {
-				continue
-			}
-
-			// Parse the directive to get the subcommand
-			subcmd, _ := parseSubcommandDirective(split[1])
-			if subcmd != cmd {
-				continue
-			}
-
-			// We have found the right subcommand
-			v, valid := utils.DerefValue(app)
-			if !valid || v.Kind() != reflect.Struct {
-				return nil, fmt.Errorf("failed to get subcommand from field %v of type %v", field.Name, st.Name())
-			}
-			fieldval := v.FieldByName(field.Name)
-			if !fieldval.IsValid() {
-				return nil, fmt.Errorf("failed to get subcommand from field %v of type %v", field.Name, st.Name())
-			}
-			return fieldval.Interface(), nil
-		}
-	}
-	return nil, nil
-}
-
-// hasCommand returns true if the application implements a specific command; and false otherwise.
-func (commander Commander) hasCommand(app interface{}, cmd string) (bool, error) {
-	cmd = normalizeCommand(cmd)
-	apptype := reflect.TypeOf(app)
-	for i := 0; i < apptype.NumMethod(); i++ {
-		method := apptype.Method(i)
-		if strings.ToLower(method.Name) == cmd {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // GetFlagSet returns a flagset that corresponds to an application. This does not get
@@ -260,75 +139,8 @@ func (commander Commander) GetFlagSet(app interface{}, appname string) (*flag.Fl
 	setter := newFlagSetter(flagset)
 	defer setter.finish()
 
-	err := commander.setupFlagSet(app, setter)
+	err := setupFlagSet(app, setter)
 	return flagset, errors.Wrapf(err, "failed to get flagset")
-}
-
-// SetupflagSet goes through the type of the application and creates flags on the flagset passed in.
-func (commander Commander) setupFlagSet(app interface{}, setter *flagSetter) error {
-	// Get the raw type of the app
-	st, valid := utils.DerefType(app)
-	if !valid {
-		return fmt.Errorf("application needs to be a struct or a pointer to a struct")
-	}
-
-	// Look through each field for flags and subcommand flags
-	for i := 0; i < st.NumField(); i++ {
-		field := st.Field(i)
-		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-			split := strings.Split(alias, "=")
-			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
-				return fmt.Errorf("malformed tag on application: %v", alias)
-			}
-
-			// If this field is itself a flag
-			if split[0] == FlagDirective {
-				err := setter.setFlag(app, field, split[1])
-				if err != nil {
-					return errors.Wrapf(err, "failed to setup flag for application")
-				}
-			}
-
-			// If this field has subflags, recurse inside that
-			if split[0] == FlagStructDirective {
-				v, valid := utils.DerefValue(app)
-				if !valid || v.Kind() != reflect.Struct {
-					// The subapp is nil or not a struct
-					return nil
-				}
-				fieldval := v.FieldByName(field.Name)
-				if !fieldval.IsValid() {
-					return fmt.Errorf("failed to get flags from field %v of type %v", field.Name, st.Name())
-				}
-				fieldIface := fieldval.Interface()
-				if fieldval.Type().Kind() == reflect.Struct {
-					fieldIface = fieldval.Addr().Interface()
-				}
-				if err := commander.setupFlagSet(fieldIface, setter); err != nil {
-					return errors.Wrap(err, "failed to get flagset for sub-struct")
-				}
-			} else if split[0] == FlagSliceDirective {
-				v, valid := utils.DerefValue(app)
-				if !valid || v.Kind() != reflect.Struct {
-					// The subapp is nil or not a struct
-					return nil
-				}
-				fieldval := v.FieldByName(field.Name)
-				if !fieldval.IsValid() {
-					return fmt.Errorf("failed to get flags from field %v of type %v", field.Name, st.Name())
-				} else if fieldval.Kind() != reflect.Slice {
-					return fmt.Errorf("FlagSlice directive should only be used on slice fields")
-				}
-				for i := 0; i < fieldval.Len(); i++ {
-					item := fieldval.Index(i)
-					if err := commander.setupFlagSet(item.Interface(), setter); err != nil {
-						return errors.Wrap(err, "failed to get flagset for slice element")
-					}
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // Usage returns the "help" string for this application.
@@ -388,7 +200,198 @@ func (commander Commander) PrintUsage(app interface{}, appname string) {
 	fmt.Fprintf(commander.UsageOutput, usage)
 }
 
-// ParseSubcommandDirective parses the subcommand directive into the subcommand string and its description.
+func findCommand(app interface{}, commands []string) (string, error) {
+	for _, cmd := range commands {
+		if found, err := hasCommand(app, cmd); err != nil {
+			return "", err
+		} else if found {
+			return cmd, nil
+		}
+	}
+	return "", nil
+}
+
+func executeCommand(app interface{}, cmd string, args []string, flagset *flag.FlagSet) error {
+	// Reparse flags to populate some of the flags that the default package might have missed
+	if err := flagset.Parse(args); err != nil {
+		return errors.WithStack(err)
+	}
+	args = flagset.Args()
+
+	// Execute post flag parse hook
+	if err := executeHook(app); err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Finally run that command if everything seems fine
+	if err := runCommand(app, cmd, args...); err != nil {
+		return err
+	}
+	return nil
+}
+
+// runCommand runs a specific command of the application with arguments.
+func runCommand(app interface{}, cmd string, args ...string) error {
+	method, err := getMethod(app, cmd)
+	if err != nil {
+		return err
+	}
+
+	// Make sure we have enough args for this command
+	inputsize := method.Type.NumIn() - 1
+	if len(args) != inputsize && method.Type.In(inputsize).Kind() != reflect.Slice {
+		return fmt.Errorf("command requires %v arguments, have %v", inputsize, len(args))
+	} else if len(args) < inputsize {
+		args = append(args, "[]")
+	} else if len(args) > inputsize || method.Type.In(inputsize).Kind() == reflect.Slice {
+		// Then we consider that the extra arguments are just a list of strings
+		extras := args[inputsize-1:]
+		bytes, _ := json.Marshal(extras)
+		args[inputsize-1] = string(bytes)
+		args = args[:inputsize]
+	}
+
+	in := make([]reflect.Value, len(args)+1)
+	in[0] = reflect.ValueOf(app)
+	for i, arg := range args {
+		t := method.Type.In(i + 1)
+		param, err := utils.ParseString(t, arg)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse string into function argument")
+		}
+		in[i+1] = param
+	}
+	out := method.Func.Call(in)
+	if len(out) == 0 {
+		return nil
+	} else if err, ok := out[0].Interface().(error); ok {
+		return applicationError{err}
+	}
+	return nil
+}
+
+// subCommand returns the subcommand struct that corresponds to the command cmd. If none is found,
+// subCommand returns nil, nil.
+func subCommand(app interface{}, cmd string) (interface{}, error) {
+	st, valid := utils.DerefType(app)
+	if !valid {
+		return nil, fmt.Errorf("application needs to be a struct or a pointer to a struct")
+	}
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
+			split := strings.Split(alias, "=")
+			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
+				return nil, fmt.Errorf("malformed tag on application: %v", alias)
+			}
+
+			// If this field has subflags, recurse inside that
+			if split[0] != SubcommandDirective {
+				continue
+			}
+
+			// Parse the directive to get the subcommand
+			subcmd, _ := parseSubcommandDirective(split[1])
+			if subcmd != cmd {
+				continue
+			}
+
+			// We have found the right subcommand
+			v, valid := utils.DerefValue(app)
+			if !valid || v.Kind() != reflect.Struct {
+				return nil, fmt.Errorf("failed to get subcommand from field %v of type %v", field.Name, st.Name())
+			}
+			fieldval := v.FieldByName(field.Name)
+			if !fieldval.IsValid() {
+				return nil, fmt.Errorf("failed to get subcommand from field %v of type %v", field.Name, st.Name())
+			}
+			return fieldval.Interface(), nil
+		}
+	}
+	return nil, nil
+}
+
+// hasCommand returns true if the application implements a specific command; and false otherwise.
+func hasCommand(app interface{}, cmd string) (bool, error) {
+	cmd = normalizeCommand(cmd)
+	apptype := reflect.TypeOf(app)
+	for i := 0; i < apptype.NumMethod(); i++ {
+		method := apptype.Method(i)
+		if strings.ToLower(method.Name) == cmd {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// setupflagSet goes through the type of the application and creates flags on the flagset passed in.
+func setupFlagSet(app interface{}, setter *flagSetter) error {
+	// Get the raw type of the app
+	st, valid := utils.DerefType(app)
+	if !valid {
+		return fmt.Errorf("application needs to be a struct or a pointer to a struct")
+	}
+
+	// Look through each field for flags and subcommand flags
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
+			split := strings.Split(alias, "=")
+			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
+				return fmt.Errorf("malformed tag on application: %v", alias)
+			}
+
+			// If this field is itself a flag
+			if split[0] == FlagDirective {
+				err := setter.setFlag(app, field, split[1])
+				if err != nil {
+					return errors.Wrapf(err, "failed to setup flag for application")
+				}
+			}
+
+			// If this field has subflags, recurse inside that
+			if split[0] == FlagStructDirective {
+				v, valid := utils.DerefValue(app)
+				if !valid || v.Kind() != reflect.Struct {
+					// The subapp is nil or not a struct
+					return nil
+				}
+				fieldval := v.FieldByName(field.Name)
+				if !fieldval.IsValid() {
+					return fmt.Errorf("failed to get flags from field %v of type %v", field.Name, st.Name())
+				}
+				fieldIface := fieldval.Interface()
+				if fieldval.Type().Kind() == reflect.Struct {
+					fieldIface = fieldval.Addr().Interface()
+				}
+				if err := setupFlagSet(fieldIface, setter); err != nil {
+					return errors.Wrap(err, "failed to get flagset for sub-struct")
+				}
+			} else if split[0] == FlagSliceDirective {
+				v, valid := utils.DerefValue(app)
+				if !valid || v.Kind() != reflect.Struct {
+					// The subapp is nil or not a struct
+					return nil
+				}
+				fieldval := v.FieldByName(field.Name)
+				if !fieldval.IsValid() {
+					return fmt.Errorf("failed to get flags from field %v of type %v", field.Name, st.Name())
+				} else if fieldval.Kind() != reflect.Slice {
+					return fmt.Errorf("FlagSlice directive should only be used on slice fields")
+				}
+				for i := 0; i < fieldval.Len(); i++ {
+					item := fieldval.Index(i)
+					if err := setupFlagSet(item.Interface(), setter); err != nil {
+						return errors.Wrap(err, "failed to get flagset for slice element")
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// parseSubcommandDirective parses the subcommand directive into the subcommand string and its description.
 func parseSubcommandDirective(directive string) (cmd string, description string) {
 	split := strings.SplitN(directive, ",", 2)
 	if len(split) == 2 {
@@ -422,4 +425,16 @@ func normalizeCommand(cmd string) string {
 	cmd = strings.Replace(cmd, "_", "", -1)
 	cmd = strings.ToLower(cmd)
 	return cmd
+}
+
+func getMethod(app interface{}, cmd string) (reflect.Method, error) {
+	apptype := reflect.TypeOf(app)
+	var method reflect.Method
+	for i := 0; i < apptype.NumMethod(); i++ {
+		method = apptype.Method(i)
+		if strings.ToLower(method.Name) == normalizeCommand(cmd) {
+			return method, nil
+		}
+	}
+	return method, fmt.Errorf("failed to find method %v", cmd)
 }
