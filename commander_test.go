@@ -360,6 +360,17 @@ func TestApplication2(t *testing.T) {
 		err := commander.New().RunCLI(app, []string{"subcmd2", "cmd1", "first", "second", "third"})
 		require.NoError(t, err)
 	})
+	t.Run("array_not_enough_args", func(t *testing.T) {
+		app := &Application2{
+			SubCmd2: &SubCmd2{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd2", "cmd1"})
+		require.Error(t, err)
+		require.NotEqual(t, errTest, err)
+
+		err = commander.New().RunCLI(app, []string{"subcmd2", "cmd1", "first"})
+		require.Equal(t, errTest, err)
+	})
 }
 
 func assertEqualLines(t *testing.T, expected, actual string) {

@@ -241,7 +241,9 @@ func runCommand(app interface{}, cmd string, args ...string) error {
 
 	// Make sure we have enough args for this command
 	inputsize := method.Type.NumIn() - 1
-	if len(args) != inputsize && method.Type.In(inputsize).Kind() != reflect.Slice {
+	if len(args) < inputsize-1 && method.Type.In(inputsize).Kind() == reflect.Slice {
+		return fmt.Errorf("command requires %v arguments, have %v", inputsize-1, len(args))
+	} else if len(args) != inputsize && method.Type.In(inputsize).Kind() != reflect.Slice {
 		return fmt.Errorf("command requires %v arguments, have %v", inputsize, len(args))
 	} else if len(args) < inputsize {
 		args = append(args, "[]")
@@ -253,7 +255,7 @@ func runCommand(app interface{}, cmd string, args ...string) error {
 		args = args[:inputsize]
 	}
 
-	in := make([]reflect.Value, len(args)+1)
+	in := make([]reflect.Value, inputsize+1)
 	in[0] = reflect.ValueOf(app)
 	for i, arg := range args {
 		t := method.Type.In(i + 1)
