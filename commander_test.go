@@ -82,25 +82,36 @@ func (app *SubSubApplication) OpDeep() {
 }
 
 type Application2 struct {
-	SubCmd *SubCmd2 `commander:"subcommand=subcmd2"`
+	SubCmd  *SubCmd  `commander:"subcommand=subcmd"`
+	SubCmd2 *SubCmd2 `commander:"subcommand=subcmd2"`
+}
+
+type SubCmd struct {
+}
+
+func (sub *SubCmd) SubCmd(str1, str2 string) error {
+	if str1 != str2 {
+		return errTest
+	}
+	return nil
 }
 
 type SubCmd2 struct {
 	Fl int `commander:"flag=anint"`
-
-	count int
 }
 
-func (sub *SubCmd2) CommanderDefault(arg string) {
-	if arg == "arg" {
-		sub.count++
+func (sub *SubCmd2) CommanderDefault(arg string) error {
+	if arg != "arg" {
+		return errTest
 	}
+	return nil
 }
 
-func (sub *SubCmd2) Cmd1(first string, others []string) {
-	if first == "first" && len(others) == 2 {
-		sub.count++
+func (sub *SubCmd2) Cmd1(first string, others []string) error {
+	if first != "first" || len(others) != 2 {
+		return errTest
 	}
+	return nil
 }
 
 func TestCommanderBasics(t *testing.T) {
@@ -200,46 +211,55 @@ func TestSubSubcommand(t *testing.T) {
 }
 
 func TestFlagOrder(t *testing.T) {
-	app := &Application{
-		SubApp: &SubApplication{},
-	}
-	args := []string{"--intflag", "11", "opone", "--intflag", "10", "test"}
-	err := commander.New().RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.count)
-	require.Equal(t, 10, app.IntFlag)
-	require.True(t, app.postFlagHooked)
+	t.Run("1", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"--intflag", "11", "opone", "--intflag", "10", "test"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.count)
+		require.Equal(t, 10, app.IntFlag)
+		require.True(t, app.postFlagHooked)
+	})
 
-	app = &Application{
-		SubApp: &SubApplication{},
-	}
-	args = []string{"--intflag", "10", "subapp", "opthree"}
-	err = commander.New().RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.SubApp.count)
-	require.Equal(t, 10, app.IntFlag)
-	require.Equal(t, 0, app.SubApp.SubIntFlag)
-	require.True(t, app.postFlagHooked)
+	t.Run("2", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"--intflag", "10", "subapp", "opthree"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubApp.count)
+		require.Equal(t, 10, app.IntFlag)
+		require.Equal(t, 0, app.SubApp.SubIntFlag)
+		require.True(t, app.postFlagHooked)
+	})
 
-	app = &Application{
-		SubApp: &SubApplication{},
-	}
-	args = []string{"subapp", "--subintflag", "10", "opthree"}
-	err = commander.New().RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.SubApp.count)
-	require.Equal(t, 0, app.IntFlag)
-	require.Equal(t, 10, app.SubApp.SubIntFlag)
+	t.Run("3", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"subapp", "--subintflag", "10", "opthree"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubApp.count)
+		require.Equal(t, 0, app.IntFlag)
+		require.Equal(t, 10, app.SubApp.SubIntFlag)
 
-	app = &Application{
-		SubApp: &SubApplication{},
-	}
-	args = []string{"--intflag", "10", "subapp", "--subintflag", "10", "opthree"}
-	err = commander.New().RunCLI(app, args)
-	require.NoError(t, err)
-	require.Equal(t, 1, app.SubApp.count)
-	require.Equal(t, 10, app.IntFlag)
-	require.Equal(t, 10, app.SubApp.SubIntFlag)
+	})
+
+	t.Run("4", func(t *testing.T) {
+		app := &Application{
+			SubApp: &SubApplication{},
+		}
+		args := []string{"--intflag", "10", "subapp", "--subintflag", "10", "opthree"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+		require.Equal(t, 1, app.SubApp.count)
+		require.Equal(t, 10, app.IntFlag)
+		require.Equal(t, 10, app.SubApp.SubIntFlag)
+	})
 }
 
 func TestUsage(t *testing.T) {
@@ -307,33 +327,38 @@ Sub-Commands:
 func TestApplication2(t *testing.T) {
 	t.Run("calls_commander_default", func(t *testing.T) {
 		app := &Application2{
-			SubCmd: &SubCmd2{},
+			SubCmd2: &SubCmd2{},
 		}
 		err := commander.New().RunCLI(app, []string{"subcmd2", "arg"})
 		require.NoError(t, err)
-		require.Equal(t, 1, app.SubCmd.count)
+	})
+	t.Run("calls_subcmd_name", func(t *testing.T) {
+		app := &Application2{
+			SubCmd: &SubCmd{},
+		}
+		err := commander.New().RunCLI(app, []string{"subcmd", "subcmd", "subcmd"})
+		require.NoError(t, err)
 	})
 	t.Run("not_enough_arguments", func(t *testing.T) {
 		app := &Application2{
-			SubCmd: &SubCmd2{},
+			SubCmd2: &SubCmd2{},
 		}
 		err := commander.New().RunCLI(app, []string{"subcmd2"})
 		require.Error(t, err)
 	})
 	t.Run("too_many_arguments", func(t *testing.T) {
 		app := &Application2{
-			SubCmd: &SubCmd2{},
+			SubCmd2: &SubCmd2{},
 		}
 		err := commander.New().RunCLI(app, []string{"subcmd2", "arg", "arg2"})
 		require.Error(t, err)
 	})
 	t.Run("last_arg_string_array", func(t *testing.T) {
 		app := &Application2{
-			SubCmd: &SubCmd2{},
+			SubCmd2: &SubCmd2{},
 		}
 		err := commander.New().RunCLI(app, []string{"subcmd2", "cmd1", "first", "second", "third"})
 		require.NoError(t, err)
-		require.Equal(t, 1, app.SubCmd.count)
 	})
 }
 

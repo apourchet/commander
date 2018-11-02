@@ -117,7 +117,9 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			commander.PrintUsage(app, appname)
 			return fmt.Errorf("failed to find possible method: %v", commands)
 		} else if len(arguments) > 0 && cmd == arguments[0] {
-			arguments = arguments[1:]
+			if len(cumulativeCommands) < 2 || cumulativeCommands[len(cumulativeCommands)-2] != arguments[0] {
+				arguments = arguments[1:]
+			}
 		}
 
 		err = executeCommand(app, cmd, arguments, flagset)
