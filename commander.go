@@ -122,6 +122,8 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			}
 		}
 
+		// TODO: setup additional flags with the command we are about to run
+
 		err = executeCommand(app, cmd, arguments, flagset.FlagSet)
 		if err != nil && !isApplicationError(err) {
 			commander.PrintUsage(app, appname)
@@ -354,7 +356,7 @@ func setupFlagSet(app interface{}, setter *FlagSet) error {
 			}
 
 			// If this field has subflags, recurse inside that
-			if split[0] == FlagStructDirective {
+			if split[0] == FlagStructDirective && len(split) == 1 {
 				v, valid := utils.DerefValue(app)
 				if !valid || v.Kind() != reflect.Struct {
 					// The subapp is nil or not a struct
