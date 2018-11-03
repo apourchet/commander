@@ -51,6 +51,78 @@ func TestFlagParsing(t *testing.T) {
 	})
 }
 
+func TestFlagStringify(t *testing.T) {
+	cmd := commander.New()
+
+	t.Run("1", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		args := []string{"--boolflag", "--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		newargs := flagset.Stringify()
+
+		app = &FlagTester{}
+		flagset, err = cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		flagset.Parse(newargs)
+		require.True(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
+
+	t.Run("2", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		args := []string{"--boolflag", "--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		newargs := flagset.Stringify()
+
+		app = &FlagTester{}
+		flagset, err = cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		flagset.Parse(newargs)
+		require.True(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
+
+	t.Run("3", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		args := []string{"--stringflag", "somestring", "--intflag", "10"}
+		flagset.Parse(args)
+		newargs := flagset.Stringify()
+
+		app = &FlagTester{}
+		flagset, err = cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		flagset.Parse(newargs)
+		require.False(t, app.Bool)
+		require.Equal(t, "somestring", app.String)
+		require.Equal(t, 10, app.Int)
+	})
+
+	t.Run("4", func(t *testing.T) {
+		app := &FlagTester{}
+		flagset, err := cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		args := []string{}
+		flagset.Parse(args)
+		newargs := flagset.Stringify()
+
+		app = &FlagTester{}
+		flagset, err = cmd.GetFlagSet(app, "CLI")
+		require.NoError(t, err)
+		flagset.Parse(newargs)
+		require.False(t, app.Bool)
+		require.Equal(t, "", app.String)
+		require.Equal(t, 0, app.Int)
+	})
+}
+
 func TestFlagDefaults(t *testing.T) {
 	cmd := commander.New()
 

@@ -122,7 +122,7 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			}
 		}
 
-		err = executeCommand(app, cmd, arguments, flagset)
+		err = executeCommand(app, cmd, arguments, flagset.FlagSet)
 		if err != nil && !isApplicationError(err) {
 			commander.PrintUsage(app, appname)
 			return fmt.Errorf("failed to run application: %v", err)
@@ -134,15 +134,15 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 	}
 }
 
-// GetFlagSet returns a flagset that corresponds to an application. This does not get
-// return a flagset that will work for subcommands of that application.
-func (commander Commander) GetFlagSet(app interface{}, appname string) (*flag.FlagSet, error) {
+// GetFlagSet returns a flagset that corresponds to an application. This flagset can then be used
+// like a *flag.FlagSet, with the additional .Stringify method.
+func (commander Commander) GetFlagSet(app interface{}, appname string) (*FlagSet, error) {
 	flagset := flag.NewFlagSet(appname, commander.FlagErrorHandling)
-	setter := newFlagSetter(flagset)
+	setter := newFlagSet(flagset)
 	defer setter.finish()
 
 	err := setupFlagSet(app, setter)
-	return flagset, errors.Wrapf(err, "failed to get flagset")
+	return setter, errors.Wrapf(err, "failed to get flagset")
 }
 
 // Usage returns the "help" string for this application.
@@ -329,7 +329,7 @@ func hasCommand(app interface{}, cmd string) (bool, error) {
 }
 
 // setupflagSet goes through the type of the application and creates flags on the flagset passed in.
-func setupFlagSet(app interface{}, setter *flagSetter) error {
+func setupFlagSet(app interface{}, setter *FlagSet) error {
 	// Get the raw type of the app
 	st, valid := utils.DerefType(app)
 	if !valid {

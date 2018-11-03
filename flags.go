@@ -37,10 +37,8 @@ func (target *flagTarget) Usage() string {
 	return fmt.Sprintf(`%s (type: %s, default: %s)`, target.usage, target.field.Type.Kind(), def)
 }
 
-// String returns the stringified value of the object's field that the FlagTarget is bound to.
-func (target *flagTarget) String() string {
-	return ""
-}
+// String has to be implemented for flag.Value.
+func (target *flagTarget) String() string { return "" }
 
 // IsBoolFlag returns false always so that the flag usage does not show "value" after each flag.
 func (target *flagTarget) IsBoolFlag() bool {
@@ -55,42 +53,62 @@ func (target *flagTarget) Set(value string) error {
 	return nil
 }
 
-// FlagSetter is the wrapper around flag.FlagSet that allows setting of a flag multiple times. This is
+func (target *flagTarget) value() string {
+	val, _ := utils.GetFieldValue(target.object, target.field.Name)
+	return val
+}
+
+// FlagSet is the wrapper around flag.FlagSet that allows setting of a flag multiple times. This is
 // useful in the case of subcommands that might use the same flag.
-type flagSetter struct {
-	flagset *flag.FlagSet
+type FlagSet struct {
+	*flag.FlagSet
 	targets map[string]*flagTarget
 }
 
-// NewFlagSetter returns a new FlagSetter, with the internal variables initialized.
-func newFlagSetter(flagset *flag.FlagSet) *flagSetter {
-	return &flagSetter{
-		flagset: flagset,
+// NewFlagSet returns a new FlagSet, with the internal variables initialized.
+func newFlagSet(flagset *flag.FlagSet) *FlagSet {
+	return &FlagSet{
+		FlagSet: flagset,
 		targets: map[string]*flagTarget{},
 	}
 }
 
-// SetFlag creates a flag on the flagset given so that when the flagset.
-func (setter *flagSetter) setFlag(obj interface{}, field reflect.StructField, directive string) error {
-	name, usage := parseFlagDirective(directive)
-	return setter.addTarget(name, obj, field, usage)
+// Stringify returns the stringified version of the flagset.
+func (set *FlagSet) Stringify() []string {
+	out := []string{}
+	for name, target := range set.targets {
+		if target.IsBoolFlag() {
+			if target.value() == "true" {
+				out = append(out, "--"+name)
+			}
+		} else {
+			out = append(out, "--"+name, target.value())
+		}
+	}
+	return out
 }
 
-// Finish tells the setter that the flags have all been accounted for, and it can forward all the flag
+// SetFlag creates a flag on the flagset given so that when the flagset.
+func (set *FlagSet) setFlag(obj interface{}, field reflect.StructField, directive string) error {
+	name, usage := parseFlagDirective(directive)
+	return set.addTarget(name, obj, field, usage)
+}
+
+// Finish tells the set that the flags have all been accounted for, and it can forward all the flag
 // setup to the internal flagset.
-func (setter *flagSetter) finish() {
-	for name, target := range setter.targets {
-		setter.flagset.Var(target, name, target.Usage())
+func (set *FlagSet) finish() {
+	for name, target := range set.targets {
+		set.Var(target, name, target.Usage())
 	}
 }
 
-func (setter *flagSetter) addTarget(name string, obj interface{}, field reflect.StructField, usage string) error {
-	target, found := setter.targets[name]
+func (set *FlagSet) addTarget(name string, obj interface{}, field reflect.StructField, usage string) error {
+	target, found := set.targets[name]
 	if found {
 		return errors.Errorf("Duplicate binding of flag: %v", name)
 	}
 	target = newFlagTarget(obj, field, usage)
-	setter.targets[name] = target
+	set.targets[name] = target
 	return nil
 }
 
