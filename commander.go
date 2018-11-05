@@ -148,13 +148,12 @@ func (commander Commander) GetFlagSet(app interface{}, appname string) (*FlagSet
 // GetFlagSetWithCommand returns a flagset that corresponds to an application. This flagset will
 // also contain the flagstruct setting sfor the given command of that application.
 func (commander Commander) GetFlagSetWithCommand(app interface{}, appname string, cmd string) (*FlagSet, error) {
-	flagset, err := commander.GetFlagSet(app, appname)
-	if err != nil {
-		return nil, err
-	} else if err := setupNamedFlagStruct(app, cmd, flagset.FlagSet); err != nil {
+	appname = fmt.Sprintf("%s %s", appname, cmd)
+	flagset := flag.NewFlagSet(appname, commander.FlagErrorHandling)
+	if err := setupNamedFlagStruct(app, cmd, flagset); err != nil {
 		return nil, err
 	}
-	return flagset, nil
+	return newFlagSet(flagset), nil
 }
 
 // Usage returns the "help" string for this application.
@@ -178,10 +177,7 @@ func (commander Commander) NamedUsage(app interface{}, appname string) string {
 // NamedUsageWithCommand returns the usage of this application given the command passed in, with
 // a custom name at the top.
 func (commander Commander) NamedUsageWithCommand(app interface{}, appname string, cmd string) string {
-	flagset, _ := commander.GetFlagSet(app, appname)
-	if flagset != nil {
-		setupNamedFlagStruct(app, cmd, flagset.FlagSet)
-	}
+	flagset, _ := commander.GetFlagSetWithCommand(app, appname, cmd)
 	return usageWithFlagset(app, flagset)
 }
 

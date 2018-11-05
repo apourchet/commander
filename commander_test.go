@@ -294,8 +294,7 @@ func TestApplication3(t *testing.T) {
 	})
 
 	t.Run("usage", func(t *testing.T) {
-		expected := `Usage of CLI:
-  -a	No usage found for this flag. (type: string, default: "")
+		expected := `Usage of CLI cmd1:
   -b2
     	No usage found for this flag. (type: string, default: "")
   -common
