@@ -1,6 +1,7 @@
 package commander_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -10,109 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type Application struct {
-	count          int
-	postFlagHooked bool
-
-	IntFlag int `commander:"flag=intflag,An int"`
-
-	SubApp  *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
-	SubApp2 *SubApplication `commander:"subcommand=subapp2,Use subapp commands"`
-}
-
-var errTest = fmt.Errorf("ERROR")
-
-func (app *Application) OpOne(str string) error {
-	if str == "test" {
-		app.count++
-	}
-	return nil
-}
-
-func (app *Application) OpTwo(i int) {
-	if i == 30 {
-		app.count++
-	}
-}
-
-func (app *Application) OpThree() error {
-	return errTest
-}
-
-func (app *Application) CLIName() string { return "myapp" }
-
-func (app *Application) PostFlagParse() error {
-	app.postFlagHooked = (app.IntFlag == 10)
-	return nil
-}
-
-func (app *Application) OpVariadic(name string, names []string) {
-	app.count += len(names)
-}
-
-type SubApplication struct {
-	count int
-
-	SubIntFlag int `commander:"flag=subintflag,Another int"`
-
-	SubSubApp *SubSubApplication `commander:"subcommand=subsubapp,Use subsubapp commands"`
-}
-
-func (app *SubApplication) SubApp() error {
-	return errTest
-}
-
-func (app *SubApplication) OpThree() {
-	app.count++
-}
-
-func (app *SubApplication) OpFour(m map[string]string) {
-	if m["test"] == "testing" {
-		app.count++
-	}
-}
-
-type SubSubApplication struct {
-	count int
-}
-
-func (app *SubSubApplication) OpDeep() {
-	app.count++
-}
-
-type Application2 struct {
-	SubCmd  *SubCmd  `commander:"subcommand=subcmd"`
-	SubCmd2 *SubCmd2 `commander:"subcommand=subcmd2"`
-}
-
-type SubCmd struct {
-}
-
-func (sub *SubCmd) SubCmd(str1, str2 string) error {
-	if str1 != str2 {
-		return errTest
-	}
-	return nil
-}
-
-type SubCmd2 struct {
-	Fl int `commander:"flag=anint"`
-}
-
-func (sub *SubCmd2) CommanderDefault(arg string) error {
-	if arg != "arg" {
-		return errTest
-	}
-	return nil
-}
-
-func (sub *SubCmd2) Cmd1(first string, others []string) error {
-	if first != "first" || len(others) != 2 {
-		return errTest
-	}
-	return nil
-}
 
 func TestCommanderBasics(t *testing.T) {
 	cmd := commander.New()
@@ -370,6 +268,45 @@ func TestApplication2(t *testing.T) {
 
 		err = commander.New().RunCLI(app, []string{"subcmd2", "cmd1", "first"})
 		require.Equal(t, errTest, err)
+	})
+}
+
+func TestApplication3(t *testing.T) {
+	t.Run("1", func(t *testing.T) {
+		app := &Application3{}
+		args := []string{"--common", "1"}
+		err := commander.New().RunCLI(app, args)
+		require.Error(t, err)
+	})
+
+	t.Run("2", func(t *testing.T) {
+		app := &Application3{}
+		args := []string{"cmd1", "--common", "1", "--b2", "1", "arg1"}
+		err := commander.New().RunCLI(app, args)
+		require.NoError(t, err)
+	})
+
+	t.Run("3", func(t *testing.T) {
+		app := &Application3{}
+		args := []string{"cmd1", "--c2", "1"}
+		err := commander.New().RunCLI(app, args)
+		require.Error(t, err)
+	})
+
+	t.Run("usage", func(t *testing.T) {
+		expected := `Usage of CLI cmd1:
+  -b2
+    	No usage found for this flag. (type: string, default: "")
+  -common
+    	No usage found for this flag. (type: string, default: "")
+`
+		buf := &bytes.Buffer{}
+		cmd := commander.New()
+		cmd.UsageOutput = buf
+		err := cmd.RunCLI(&Application3{}, []string{"cmd1"})
+		require.Error(t, err)
+		fmt.Println(buf.String())
+		assertEqualLines(t, expected, buf.String())
 	})
 }
 
