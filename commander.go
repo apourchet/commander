@@ -238,17 +238,6 @@ func usageWithFlagset(app interface{}, flagset *FlagSet) string {
 	return buf.String()
 }
 
-func findCommand(app interface{}, commands []string) (string, error) {
-	for _, cmd := range commands {
-		if found, err := hasCommand(app, cmd); err != nil {
-			return "", err
-		} else if found {
-			return cmd, nil
-		}
-	}
-	return "", nil
-}
-
 func executeCommand(app interface{}, cmd string, args []string, flagset *flag.FlagSet) error {
 	// Reparse flags to populate some of the flags that the default package might have missed
 	if err := flagset.Parse(args); err != nil {
@@ -351,19 +340,6 @@ func subCommand(app interface{}, cmd string) (interface{}, error) {
 	return nil, nil
 }
 
-// hasCommand returns true if the application implements a specific command; and false otherwise.
-func hasCommand(app interface{}, cmd string) (bool, error) {
-	cmd = normalizeCommand(cmd)
-	apptype := reflect.TypeOf(app)
-	for i := 0; i < apptype.NumMethod(); i++ {
-		method := apptype.Method(i)
-		if strings.ToLower(method.Name) == cmd {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func setupNamedFlagStruct(app interface{}, cmd string, flagset *flag.FlagSet) error {
 	// Get the raw type of the app
 	st, valid := utils.DerefType(app)
@@ -456,52 +432,4 @@ func setupFlagSet(app interface{}, setter *FlagSet) error {
 		}
 	}
 	return nil
-}
-
-// parseSubcommandDirective parses the subcommand directive into the subcommand string and its description.
-func parseSubcommandDirective(directive string) (cmd string, description string) {
-	split := strings.SplitN(directive, ",", 2)
-	if len(split) == 2 {
-		return split[0], split[1]
-	}
-	return split[0], "No description for this subcommand"
-}
-
-func executeHook(app interface{}) error {
-	if hook, ok := app.(PostFlagParseHook); ok {
-		if err := hook.PostFlagParse(); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-	return nil
-}
-
-func getCLIName(app interface{}, commands ...string) string {
-	appname := "CLI"
-	if casted, ok := app.(NamedCLI); ok {
-		appname = casted.CLIName()
-	}
-	if len(commands) > 0 {
-		appname += " " + strings.Join(commands, " ")
-	}
-	return appname
-}
-
-func normalizeCommand(cmd string) string {
-	cmd = strings.Replace(cmd, "-", "", -1)
-	cmd = strings.Replace(cmd, "_", "", -1)
-	cmd = strings.ToLower(cmd)
-	return cmd
-}
-
-func getMethod(app interface{}, cmd string) (reflect.Method, error) {
-	apptype := reflect.TypeOf(app)
-	var method reflect.Method
-	for i := 0; i < apptype.NumMethod(); i++ {
-		method = apptype.Method(i)
-		if strings.ToLower(method.Name) == normalizeCommand(cmd) {
-			return method, nil
-		}
-	}
-	return method, fmt.Errorf("failed to find method %v", cmd)
 }
