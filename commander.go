@@ -51,6 +51,12 @@ type PostFlagParseHook interface {
 	PostFlagParse() error
 }
 
+// CommandDescriptionProvider is the interface that the application should implement to show the
+// description of its subcommands when the Usage of the app is printed.
+type CommandDescriptionProvider interface {
+	GetCommandDescription(cmd string) string
+}
+
 // Commander is the struct that CLI applications will interact with
 // to run their code.
 type Commander struct {

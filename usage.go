@@ -91,9 +91,14 @@ func usageWithFlagset(app interface{}, flagset *FlagSet) string {
 	fmt.Fprintf(&buf, "\nSub-Commands:\n")
 	cmds := sortKeys(directives)
 	for _, cmd := range cmds {
-		desc := directives[cmd]
-		if desc == "" {
-			desc = "No description for this subcommand"
+		desc := "No description for this subcommand"
+		if directives[cmd] != "" {
+			desc = directives[cmd]
+		}
+		if provider, ok := app.(CommandDescriptionProvider); ok {
+			if newdesc := provider.GetCommandDescription(cmd); newdesc != "" {
+				desc = newdesc
+			}
 		}
 		fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
 	}

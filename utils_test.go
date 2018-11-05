@@ -120,3 +120,10 @@ type Application3 struct {
 func (app *Application3) Cmd1(a string) error { return nil }
 
 func (app *Application3) Cmd2(b int) error { return nil }
+
+func (app *Application3) GetCommandDescription(cmd string) string {
+	if cmd == "cmd1" {
+		return "Runs cmd1"
+	}
+	return ""
+}
