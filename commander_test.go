@@ -2,7 +2,6 @@ package commander_test
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -80,7 +79,7 @@ func TestCommanderSubcommand(t *testing.T) {
 		app := &Application{
 			SubApp: &SubApplication{},
 		}
-		args := []string{"subapp"}
+		args := []string{"subapp", "test"}
 		err := commander.New().RunCLI(app, args)
 		require.Equal(t, errTest, err)
 	})
@@ -113,11 +112,10 @@ func TestFlagOrder(t *testing.T) {
 		app := &Application{
 			SubApp: &SubApplication{},
 		}
-		args := []string{"--intflag", "11", "opone", "--intflag", "10", "test"}
+		args := []string{"--intflag", "10", "subapp", "--subintflag", "10", "test"}
 		err := commander.New().RunCLI(app, args)
-		require.NoError(t, err)
-		require.Equal(t, 1, app.count)
-		require.Equal(t, 10, app.IntFlag)
+		require.Error(t, err)
+		require.Equal(t, errTest, err)
 		require.True(t, app.postFlagHooked)
 	})
 
@@ -305,7 +303,22 @@ func TestApplication3(t *testing.T) {
 		cmd.UsageOutput = buf
 		err := cmd.RunCLI(&Application3{}, []string{"cmd1"})
 		require.Error(t, err)
-		fmt.Println(buf.String())
+		assertEqualLines(t, expected, buf.String())
+	})
+
+	t.Run("usage_2", func(t *testing.T) {
+		expected := `flag provided but not defined: -asd
+Usage of CLI cmd1:
+  -b2
+    	No usage found for this flag. (type: string, default: "")
+  -common
+    	No usage found for this flag. (type: string, default: "")
+`
+		buf := &bytes.Buffer{}
+		cmd := commander.New()
+		cmd.UsageOutput = buf
+		err := cmd.RunCLI(&Application3{}, []string{"cmd1", "--asd"})
+		require.Error(t, err)
 		assertEqualLines(t, expected, buf.String())
 	})
 }

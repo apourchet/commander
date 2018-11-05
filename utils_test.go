@@ -50,7 +50,7 @@ type SubApplication struct {
 	SubSubApp *SubSubApplication `commander:"subcommand=subsubapp,Use subsubapp commands"`
 }
 
-func (app *SubApplication) SubApp() error {
+func (app *SubApplication) SubApp(arg string) error {
 	return errTest
 }
 
