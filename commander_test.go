@@ -297,6 +297,10 @@ func TestApplication3(t *testing.T) {
     	No usage found for this flag. (type: string, default: "")
   -common
     	No usage found for this flag. (type: string, default: "")
+
+Sub-Commands:
+  cmd1  |  No description for this subcommand
+  cmd2  |  No description for this subcommand
 `
 		buf := &bytes.Buffer{}
 		cmd := commander.New()

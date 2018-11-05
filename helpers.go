@@ -3,6 +3,7 @@ package commander
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/apourchet/commander/utils"
@@ -68,7 +69,7 @@ func parseSubcommandDirective(directive string) (cmd string, description string)
 	if len(split) == 2 {
 		return split[0], split[1]
 	}
-	return split[0], "No description for this subcommand"
+	return split[0], ""
 }
 
 func executeHook(app interface{}) error {
@@ -108,4 +109,13 @@ func getMethod(app interface{}, cmd string) (reflect.Method, error) {
 		}
 	}
 	return method, fmt.Errorf("failed to find method %v", cmd)
+}
+
+func sortKeys(m map[string]string) []string {
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

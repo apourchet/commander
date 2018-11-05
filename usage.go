@@ -59,16 +59,28 @@ func usageWithFlagset(app interface{}, flagset *FlagSet) string {
 		return buf.String()
 	}
 
-	directives := []string{}
+	directives := map[string]string{}
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
 			split := strings.Split(alias, "=")
-			if len(split) != 2 || split[0] != SubcommandDirective {
+			if len(split) != 2 {
+				continue
+			} else if split[0] != FlagStructDirective &&
+				split[0] != SubcommandDirective {
 				continue
 			}
 
-			directives = append(directives, split[1])
+			cmd, newdesc := parseSubcommandDirective(split[1])
+			if split[0] == FlagStructDirective {
+				if found, _ := hasCommand(app, cmd); !found {
+					continue
+				}
+			}
+
+			if desc, found := directives[cmd]; !found || desc == "" {
+				directives[cmd] = newdesc
+			}
 		}
 	}
 
@@ -77,9 +89,12 @@ func usageWithFlagset(app interface{}, flagset *FlagSet) string {
 	}
 
 	fmt.Fprintf(&buf, "\nSub-Commands:\n")
-	for _, directive := range directives {
-		// If this field has subflags, recurse inside that
-		cmd, desc := parseSubcommandDirective(directive)
+	cmds := sortKeys(directives)
+	for _, cmd := range cmds {
+		desc := directives[cmd]
+		if desc == "" {
+			desc = "No description for this subcommand"
+		}
 		fmt.Fprintf(&buf, "  %v  |  %v\n", cmd, desc)
 	}
 
