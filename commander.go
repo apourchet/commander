@@ -63,7 +63,7 @@ type Commander struct {
 func New() Commander {
 	return Commander{
 		UsageOutput:       os.Stdout,
-		FlagErrorHandling: flag.ExitOnError,
+		FlagErrorHandling: flag.ContinueOnError,
 	}
 }
 
@@ -99,16 +99,10 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			}
 		}
 
-		commands := []string{}
-		if len(cumulativeCommands) > 0 {
-			prevCmd := cumulativeCommands[len(cumulativeCommands)-1]
-			commands = []string{prevCmd}
-		}
+		commands := getPossibleCommands(arguments, cumulativeCommands)
 		if len(arguments) > 0 {
-			commands = append([]string{arguments[0]}, commands...)
 			cumulativeCommands = append(cumulativeCommands, arguments[0])
 		}
-		commands = append(commands, DefaultCommand)
 
 		cmd, err := findCommand(app, commands)
 		if err != nil {
@@ -122,11 +116,13 @@ func (commander Commander) RunCLI(app interface{}, arguments []string) error {
 			}
 		}
 
-		// TODO: setup additional flags with the command we are about to run
+		if err := setupNamedFlagStruct(app, cmd, flagset.FlagSet); err != nil {
+			return fmt.Errorf("failed to setup flags: %v", err)
+		}
 
 		err = executeCommand(app, cmd, arguments, flagset.FlagSet)
 		if err != nil && !isApplicationError(err) {
-			commander.PrintUsage(app, appname)
+			commander.PrintUsageWithCommand(app, appname, cmd)
 			return fmt.Errorf("failed to run application: %v", err)
 		} else if err != nil {
 			inner := err.(applicationError)
@@ -143,27 +139,72 @@ func (commander Commander) GetFlagSet(app interface{}, appname string) (*FlagSet
 	setter := newFlagSet(flagset)
 	defer setter.finish()
 
-	err := setupFlagSet(app, setter)
-	return setter, errors.Wrapf(err, "failed to get flagset")
+	if err := setupFlagSet(app, setter); err != nil {
+		return nil, fmt.Errorf("failed to get flagset: %v", err)
+	}
+	return setter, nil
+}
+
+// GetFlagSetWithCommand returns a flagset that corresponds to an application. This flagset will
+// also contain the flagstruct setting sfor the given command of that application.
+func (commander Commander) GetFlagSetWithCommand(app interface{}, appname string, cmd string) (*FlagSet, error) {
+	flagset, err := commander.GetFlagSet(app, appname)
+	if err != nil {
+		return nil, err
+	} else if err := setupNamedFlagStruct(app, cmd, flagset.FlagSet); err != nil {
+		return nil, err
+	}
+	return flagset, nil
 }
 
 // Usage returns the "help" string for this application.
 func (commander Commander) Usage(app interface{}) string {
-	// First use the flagset to print flags
 	appname := getCLIName(app)
 	return commander.NamedUsage(app, appname)
 }
 
+// UsageWithCommand returns the usage of this application given the command passed in.
+func (commander Commander) UsageWithCommand(app interface{}, cmd string) string {
+	appname := getCLIName(app)
+	return commander.NamedUsageWithCommand(app, appname, cmd)
+}
+
 // NamedUsage returns the usage of the CLI application with a custom name at the top.
 func (commander Commander) NamedUsage(app interface{}, appname string) string {
-	var buf bytes.Buffer
+	flagset, _ := commander.GetFlagSet(app, appname)
+	return usageWithFlagset(app, flagset)
+}
 
-	flagset, err := commander.GetFlagSet(app, appname)
-	if err == nil && flagset != nil {
+// NamedUsageWithCommand returns the usage of this application given the command passed in, with
+// a custom name at the top.
+func (commander Commander) NamedUsageWithCommand(app interface{}, appname string, cmd string) string {
+	flagset, _ := commander.GetFlagSet(app, appname)
+	if flagset != nil {
+		setupNamedFlagStruct(app, cmd, flagset.FlagSet)
+	}
+	return usageWithFlagset(app, flagset)
+}
+
+// PrintUsage prints the usage of the application given to the io.Writer specified; unless the
+// Commander fails to get the usage for this application.
+func (commander Commander) PrintUsage(app interface{}, appname string) {
+	usage := commander.NamedUsage(app, appname)
+	fmt.Fprintf(commander.UsageOutput, usage)
+}
+
+// PrintUsageWithCommand prints the usage of the application like PrintUsage but for the specific
+// subcommand provided.
+func (commander Commander) PrintUsageWithCommand(app interface{}, appname string, cmd string) {
+	usage := commander.NamedUsageWithCommand(app, appname, cmd)
+	fmt.Fprintf(commander.UsageOutput, usage)
+}
+
+func usageWithFlagset(app interface{}, flagset *FlagSet) string {
+	var buf bytes.Buffer
+	if flagset != nil {
 		flagset.SetOutput(&buf)
 		flagset.Usage()
 	}
-
 	// Then print subcommands
 	st, valid := utils.DerefType(app)
 	if !valid {
@@ -195,13 +236,6 @@ func (commander Commander) NamedUsage(app interface{}, appname string) string {
 	}
 
 	return buf.String()
-}
-
-// PrintUsage prints the usage of the application given to the io.Writer specified; unless the
-// Commander fails to get the usage for this application.
-func (commander Commander) PrintUsage(app interface{}, appname string) {
-	usage := commander.NamedUsage(app, appname)
-	fmt.Fprintf(commander.UsageOutput, usage)
 }
 
 func findCommand(app interface{}, commands []string) (string, error) {
@@ -330,6 +364,42 @@ func hasCommand(app interface{}, cmd string) (bool, error) {
 	return false, nil
 }
 
+func setupNamedFlagStruct(app interface{}, cmd string, flagset *flag.FlagSet) error {
+	// Get the raw type of the app
+	st, valid := utils.DerefType(app)
+	if !valid {
+		return fmt.Errorf("application needs to be a struct or a pointer to a struct")
+	}
+
+	setter := newFlagSet(flagset)
+	defer setter.finish()
+
+	// Look through each field for flags and subcommand flags
+	for i := 0; i < st.NumField(); i++ {
+		field := st.Field(i)
+		alias, ok := field.Tag.Lookup(FieldTag)
+		if !ok || alias == "" {
+			continue
+		}
+
+		split := strings.Split(alias, "=")
+		if len(split) != 2 || split[0] != FlagStructDirective {
+			continue
+		} else if normalizeCommand(split[1]) != normalizeCommand(cmd) {
+			continue
+		}
+
+		if fieldIface, err := derefFlagStruct(app, st, field); err != nil {
+			return errors.Wrap(err, "failed to dereference flag struct")
+		} else if fieldIface == nil {
+			continue
+		} else if err := setupFlagSet(fieldIface, setter); err != nil {
+			return errors.Wrap(err, "failed to get flagset for sub-struct")
+		}
+	}
+	return nil
+}
+
 // setupflagSet goes through the type of the application and creates flags on the flagset passed in.
 func setupFlagSet(app interface{}, setter *FlagSet) error {
 	// Get the raw type of the app
@@ -357,20 +427,11 @@ func setupFlagSet(app interface{}, setter *FlagSet) error {
 
 			// If this field has subflags, recurse inside that
 			if split[0] == FlagStructDirective && len(split) == 1 {
-				v, valid := utils.DerefValue(app)
-				if !valid || v.Kind() != reflect.Struct {
-					// The subapp is nil or not a struct
-					return nil
-				}
-				fieldval := v.FieldByName(field.Name)
-				if !fieldval.IsValid() {
-					return fmt.Errorf("failed to get flags from field %v of type %v", field.Name, st.Name())
-				}
-				fieldIface := fieldval.Interface()
-				if fieldval.Type().Kind() == reflect.Struct {
-					fieldIface = fieldval.Addr().Interface()
-				}
-				if err := setupFlagSet(fieldIface, setter); err != nil {
+				if fieldIface, err := derefFlagStruct(app, st, field); err != nil {
+					return errors.Wrap(err, "failed to dereference flag struct")
+				} else if fieldIface == nil {
+					continue
+				} else if err := setupFlagSet(fieldIface, setter); err != nil {
 					return errors.Wrap(err, "failed to get flagset for sub-struct")
 				}
 			} else if split[0] == FlagSliceDirective {

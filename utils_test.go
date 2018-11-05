@@ -117,6 +117,6 @@ type Application3 struct {
 	} `commander:"flagstruct=cmd2"`
 }
 
-func (app *Application3) Cmd1() error { return nil }
+func (app *Application3) Cmd1(a string) error { return nil }
 
-func (app *Application3) Cmd2() error { return nil }
+func (app *Application3) Cmd2(b int) error { return nil }

@@ -1,6 +1,8 @@
 package commander_test
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -279,7 +281,7 @@ func TestApplication3(t *testing.T) {
 
 	t.Run("2", func(t *testing.T) {
 		app := &Application3{}
-		args := []string{"cmd1", "--common", "1", "--b2", "1"}
+		args := []string{"cmd1", "--common", "1", "--b2", "1", "arg1"}
 		err := commander.New().RunCLI(app, args)
 		require.NoError(t, err)
 	})
@@ -293,11 +295,19 @@ func TestApplication3(t *testing.T) {
 
 	t.Run("usage", func(t *testing.T) {
 		expected := `Usage of CLI:
-  -anint
-    	No usage found for this flag. (type: int, default: 0)
+  -a	No usage found for this flag. (type: string, default: "")
+  -b2
+    	No usage found for this flag. (type: string, default: "")
+  -common
+    	No usage found for this flag. (type: string, default: "")
 `
-		usage := commander.New().Usage(&Application3{})
-		assertEqualLines(t, expected, usage)
+		buf := &bytes.Buffer{}
+		cmd := commander.New()
+		cmd.UsageOutput = buf
+		err := cmd.RunCLI(&Application3{}, []string{"cmd1"})
+		require.Error(t, err)
+		fmt.Println(buf.String())
+		assertEqualLines(t, expected, buf.String())
 	})
 }
 
