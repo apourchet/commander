@@ -167,7 +167,7 @@ func TestUsage(t *testing.T) {
 		cmd := commander.New()
 		expected := `Usage of myapp:
   -intflag
-    	An int (type: int, default: 10)
+    	An int, with a comma in the description and an = in there too (type: int, default: 10)
 
 Sub-Commands:
   subapp  |  Use subapp commands

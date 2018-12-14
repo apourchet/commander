@@ -6,7 +6,7 @@ type Application struct {
 	count          int
 	postFlagHooked bool
 
-	IntFlag int `commander:"flag=intflag,An int"`
+	IntFlag int `commander:"flag=intflag,An int, with a comma in the description and an = in there too"`
 
 	SubApp  *SubApplication `commander:"subcommand=subapp,Use subapp commands"`
 	SubApp2 *SubApplication `commander:"subcommand=subapp2,Use subapp commands"`

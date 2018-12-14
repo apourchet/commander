@@ -236,7 +236,7 @@ func subCommand(app interface{}, cmd string) (interface{}, error) {
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-			split := strings.Split(alias, "=")
+			split := strings.SplitN(alias, "=", 2)
 			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
 				return nil, fmt.Errorf("malformed tag on application: %v", alias)
 			}
@@ -285,7 +285,7 @@ func setupNamedFlagStruct(app interface{}, cmd string, flagset *flag.FlagSet) er
 			continue
 		}
 
-		split := strings.Split(alias, "=")
+		split := strings.SplitN(alias, "=", 2)
 		if len(split) != 2 || split[0] != FlagStructDirective {
 			continue
 		} else if normalizeCommand(split[1]) != normalizeCommand(cmd) {
@@ -315,7 +315,7 @@ func setupFlagSet(app interface{}, setter *FlagSet) error {
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-			split := strings.Split(alias, "=")
+			split := strings.SplitN(alias, "=", 2)
 			if len(split) != 2 && (split[0] == FlagDirective || split[0] == SubcommandDirective) {
 				return fmt.Errorf("malformed tag on application: %v", alias)
 			}

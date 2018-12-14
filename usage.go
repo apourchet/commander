@@ -63,7 +63,7 @@ func usageWithFlagset(app interface{}, flagset *FlagSet) string {
 	for i := 0; i < st.NumField(); i++ {
 		field := st.Field(i)
 		if alias, ok := field.Tag.Lookup(FieldTag); ok && alias != "" {
-			split := strings.Split(alias, "=")
+			split := strings.SplitN(alias, "=", 2)
 			if len(split) != 2 {
 				continue
 			} else if split[0] != FlagStructDirective &&
